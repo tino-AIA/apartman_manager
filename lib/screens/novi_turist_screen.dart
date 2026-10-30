@@ -1,326 +1,331 @@
 // lib/screens/novi_turist_screen.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
-import 'package:camera/camera.dart';
 import '../models/turist_model.dart';
+import '../services/podaci_service.dart';
+import '../services/ocr_service.dart';
 
 class NoviTuristScreen extends StatefulWidget {
-  final int sljedeciBrojRacuna; // npr. 103
-
-  const NoviTuristScreen({super.key, required this.sljedeciBrojRacuna});
+  final TuristBoravak? postojeci; // Ako uređujemo
+  const NoviTuristScreen({super.key, this.postojeci});
 
   @override
   State<NoviTuristScreen> createState() => _NoviTuristScreenState();
 }
 
 class _NoviTuristScreenState extends State<NoviTuristScreen> {
-  final _formKey = GlobalKey<FormState>();
+  final _service = PodaciService();
+  final _ocrService = OcrService();
 
-  final _imeCtrl = TextEditingController();
-  final _drzavljanstvoCtrl = TextEditingController();
-  final _brojIspraveCtrl = TextEditingController();
+  late String _odabraniApartman;
+  late String _nacinPlacanja;
+  late DateTime _dolazak;
+  late DateTime _odlazak;
 
-  final _brojOsobaCtrl = TextEditingController(text: '2');
-  final _cijenaPoOsobiCtrl = TextEditingController(text: '25.00');
-  final _ukupnoCtrl = TextEditingController();
+  final List<GostStavka> _listaGostiju = [];
+  int _nositeljIndex = 0;
 
-  DateTime _datumDolaska = DateTime.now();
-  DateTime _datumOdlaska = DateTime.now().add(const Duration(days: 7));
-  String _nacinPlacanja = 'Gotovina / Cash';
-
-  final List<String> _opcijePlacanja = [
-    'Gotovina / Cash',
-    'Booking',
-    'Transakcijski račun / Bank transfer',
-    'Airbnb',
-  ];
+  final _cijenaController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _rekalkulirajCijenu(izvorJeUkupno: false);
-  }
-
-  int get _brojDana => _datumOdlaska.difference(_datumDolaska).inDays;
-
-  // Dvosmjerni kalkulator (izmjena cijene po osobi/noći ili ukupnog iznosa)
-  void _rekalkulirajCijenu({required bool izvorJeUkupno}) {
-    int osobe = int.tryParse(_brojOsobaCtrl.text) ?? 1;
-    int dana = _brojDana > 0 ? _brojDana : 1;
-
-    if (izvorJeUkupno) {
-      double ukupno = double.tryParse(_ukupnoCtrl.text.replaceAll(',', '.')) ?? 0.0;
-      double poOsobi = ukupno / (osobe * dana);
-      _cijenaPoOsobiCtrl.text = poOsobi.toStringAsFixed(2);
+    if (widget.postojeci != null) {
+      final p = widget.postojeci!;
+      _odabraniApartman = p.apartmanNaziv;
+      _nacinPlacanja = p.nacinPlacanja;
+      _dolazak = p.datumDolaska;
+      _odlazak = p.datumOdlaska;
+      _listaGostiju.addAll(p.gosti);
+      _nositeljIndex = _listaGostiju.indexWhere((g) => g.nositeljRacuna);
+      if (_nositeljIndex == -1) _nositeljIndex = 0;
+      _cijenaController.text = p.cijenaOsobaNoc.toStringAsFixed(2);
     } else {
-      double poOsobi = double.tryParse(_cijenaPoOsobiCtrl.text.replaceAll(',', '.')) ?? 0.0;
-      double ukupno = poOsobi * osobe * dana;
-      _ukupnoCtrl.text = ukupno.toStringAsFixed(2);
-    }
-    setState(() {});
-  }
-
-  // Skeniranje osobnog dokumenta kamerom (MRZ / OCR)
-  Future<void> _skenirajDokument() async {
-    try {
-      final kamere = await availableCameras();
-      if (kamere.isEmpty) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Kamera nije dostupna na ovom uređaju.')),
-        );
-        return;
-      }
-
-      // Otvaranje jednostavnog foto dijaloga
-      final controller = CameraController(kamere.first, ResolutionPreset.high);
-      await controller.initialize();
-
-      if (!mounted) return;
-      final XFile? foto = await showDialog<XFile>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Usmjeri na MRZ zonu ili podatke'),
-          content: SizedBox(
-            height: 350,
-            width: double.maxFinite,
-            child: CameraPreview(controller),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Odustani'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final file = await controller.takePicture();
-                if (ctx.mounted) Navigator.pop(ctx, file);
-              },
-              child: const Text('Skeniraj'),
-            ),
-          ],
-        ),
-      );
-
-      await controller.dispose();
-
-      if (foto != null) {
-        final inputImage = InputImage.fromFilePath(foto.path);
-        final textRecognizer = TextRecognizer();
-        final RecognizedText recognizedText = await textRecognizer.processImage(inputImage);
-        await textRecognizer.close();
-
-        _obradiOcrTekst(recognizedText.text);
-      }
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Greška pri skeniranju: $e')),
-      );
+      _odabraniApartman = _service.apartmani.first.naziv;
+      _nacinPlacanja = 'Gotovina / Cash';
+      _dolazak = DateTime.now();
+      _odlazak = DateTime.now().add(const Duration(days: 7));
+      _listaGostiju.add(GostStavka(prezimeIme: '', nositeljRacuna: true));
+      _cijenaController.text = _service.dohvatiCijenuZaDatum(_dolazak).toStringAsFixed(2);
     }
   }
 
-  // Parsiranje očitanog teksta (MRZ linije ili standardni tekst)
-  void _obradiOcrTekst(String rawText) {
-    final linije = rawText.split('\n');
-    String pronadenoIme = '';
+  int get _brojNoci {
+    final diff = _odlazak.difference(_dolazak).inDays;
+    return diff <= 0 ? 1 : diff;
+  }
 
-    for (var l in linije) {
-      String clean = l.trim().replaceAll(' ', '');
-      // Traženje ICAO MRZ formata (P< ili I<)
-      if (clean.startsWith('P<') || clean.startsWith('I<') || clean.startsWith('ID')) {
-        var dijelovi = clean.split('<<');
-        if (dijelovi.length >= 2) {
-          pronadenoIme = '${dijelovi[0].replaceAll(RegExp(r'[^A-Z]'), '')} ${dijelovi[1].replaceAll('<', ' ').trim()}';
-          break;
-        }
-      }
-    }
+  int get _brojOsoba => _listaGostiju.length;
 
+  double get _cijenaPoOsobi => double.tryParse(_cijenaController.text) ?? 0.0;
+
+  double get _ukupno => _brojNoci * _brojOsoba * _cijenaPoOsobi;
+
+  void _preracunajCijenuPremaDatumu() {
     setState(() {
-      if (pronadenoIme.isNotEmpty) {
-        _imeCtrl.text = pronadenoIme;
-      } else if (linije.isNotEmpty) {
-        _imeCtrl.text = linije.first; // Fallback na prvu očitana liniju
+      _cijenaController.text = _service.dohvatiCijenuZaDatum(_dolazak).toStringAsFixed(2);
+    });
+  }
+
+  Future<void> _skenirajZaGosta(int index) async {
+    final doc = await _ocrService.skenirajDokument(context);
+    if (doc != null && doc.punoIme.isNotEmpty) {
+      setState(() {
+        _listaGostiju[index].prezimeIme = doc.punoIme;
+        _listaGostiju[index].brojDokumenta = doc.brojDokumenta;
+      });
+    }
+  }
+
+  void _dodajNovogGosta() {
+    setState(() {
+      _listaGostiju.add(GostStavka(prezimeIme: '', nositeljRacuna: false));
+    });
+  }
+
+  void _ukloniGosta(int index) {
+    if (_listaGostiju.length <= 1) return;
+    setState(() {
+      _listaGostiju.removeAt(index);
+      if (_nositeljIndex >= _listaGostiju.length) {
+        _nositeljIndex = 0;
       }
     });
+  }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Podaci uspješno očitani s dokumenta!')),
+  void _spremi() {
+    // Postavi nositelja računa
+    for (int i = 0; i < _listaGostiju.length; i++) {
+      _listaGostiju[i].nositeljRacuna = (i == _nositeljIndex);
+      if (_listaGostiju[i].prezimeIme.trim().isEmpty) {
+        _listaGostiju[i].prezimeIme = 'Gost ${i + 1}';
+      }
+    }
+
+    final nositelj = _listaGostiju[_nositeljIndex].prezimeIme;
+
+    final noviBoravak = TuristBoravak(
+      id: widget.postojeci?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      apartmanNaziv: _odabraniApartman,
+      prezimeIme: nositelj,
+      gosti: _listaGostiju,
+      datumDolaska: _dolazak,
+      datumOdlaska: _odlazak,
+      brojDana: _brojNoci,
+      brojOsoba: _brojOsoba,
+      cijenaOsobaNoc: _cijenaPoOsobi,
+      cijenaUkupno: _ukupno,
+      nacinPlacanja: _nacinPlacanja,
+      racunBroj: widget.postojeci?.racunBroj ?? '',
     );
+
+    if (widget.postojeci != null) {
+      _service.azurirajBoravak(widget.postojeci!.id, noviBoravak);
+    } else {
+      _service.dodajBoravak(noviBoravak);
+    }
+
+    Navigator.pop(context);
   }
 
   @override
   Widget build(BuildContext context) {
-    final df = DateFormat('dd. MM. yyyy.');
-    final godina = DateTime.now().year.toString().substring(2);
-    final generiraniRnBr = '${widget.sljedeciBrojRacuna}/$godina';
+    final df = DateFormat('dd.MM.yyyy.');
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Novi turist (RN $generiraniRnBr)'),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        title: Text(widget.postojeci == null ? 'Novi boravak' : 'Uredi boravak'),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Gumb za kameru / OCR
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: _skenirajDokument,
-                  icon: const Icon(Icons.camera_alt),
-                  label: const Text('SKENIRAJ OSOBNU / PUTOVNICU (OCR)'),
-                  style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
-                ),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // 1. Odabir apartmana
+            DropdownButtonFormField<String>(
+              value: _odabraniApartman,
+              decoration: const InputDecoration(
+                labelText: 'Odaberi apartman *',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.apartment),
               ),
-              const SizedBox(height: 16),
+              items: _service.apartmani.map((a) {
+                return DropdownMenuItem(value: a.naziv, child: Text(a.naziv));
+              }).toList(),
+              onChanged: (val) {
+                if (val != null) setState(() => _odabraniApartman = val);
+              },
+            ),
+            const SizedBox(height: 12),
 
-              TextFormField(
-                controller: _imeCtrl,
-                decoration: const InputDecoration(labelText: 'Prezime i ime gosta *', border: OutlineInputBorder()),
-                validator: (val) => val == null || val.isEmpty ? 'Unesite ime i prezime' : null,
-              ),
-              const SizedBox(height: 12),
-
-              Row(
-                children: [
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      value: _nacinPlacanja,
-                      decoration: const InputDecoration(labelText: 'Način plaćanja', border: OutlineInputBorder()),
-                      items: _opcijePlacanja.map((e) => DropdownMenuItem(value: e, child: Text(e, overflow: TextOverflow.ellipsis))).toList(),
-                      onChanged: (val) => setState(() => _nacinPlacanja = val!),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-
-              // Odabir datuma boravka
-              Row(
-                children: [
-                  Expanded(
-                    child: ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('Dolazak:'),
-                      subtitle: Text(df.format(_datumDolaska), style: const TextStyle(fontWeight: FontWeight.bold)),
-                      trailing: const Icon(Icons.calendar_month),
-                      onTap: () async {
-                        final pick = await showDatePicker(
-                          context: context,
-                          initialDate: _datumDolaska,
-                          firstDate: DateTime(2025),
-                          lastDate: DateTime(2030),
-                        );
-                        if (pick != null) {
-                          setState(() {
-                            _datumDolaska = pick;
-                            if (_datumOdlaska.isBefore(_datumDolaska)) {
-                              _datumOdlaska = _datumDolaska.add(const Duration(days: 1));
-                            }
-                            _rekalkulirajCijenu(izvorJeUkupno: false);
-                          });
-                        }
-                      },
-                    ),
-                  ),
-                  Expanded(
-                    child: ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('Odlazak:'),
-                      subtitle: Text(df.format(_datumOdlaska), style: const TextStyle(fontWeight: FontWeight.bold)),
-                      trailing: const Icon(Icons.calendar_month),
-                      onTap: () async {
-                        final pick = await showDatePicker(
-                          context: context,
-                          initialDate: _datumOdlaska,
-                          firstDate: _datumDolaska.add(const Duration(days: 1)),
-                          lastDate: DateTime(2030),
-                        );
-                        if (pick != null) {
-                          setState(() {
-                            _datumOdlaska = pick;
-                            _rekalkulirajCijenu(izvorJeUkupno: false);
-                          });
-                        }
-                      },
-                    ),
-                  ),
-                ],
-              ),
-              const Divider(height: 30),
-
-              // Kalkulator sekcija
-              Text('Kalkulacija cijene ($_brojDana noćenja)', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _brojOsobaCtrl,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Broj osoba', border: OutlineInputBorder()),
-                      onChanged: (_) => _rekalkulirajCijenu(izvorJeUkupno: false),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextFormField(
-                      controller: _cijenaPoOsobiCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(labelText: 'Cijena os./noć (€)', border: OutlineInputBorder()),
-                      onChanged: (_) => _rekalkulirajCijenu(izvorJeUkupno: false),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _ukupnoCtrl,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(
-                  labelText: 'UKUPNO ZA NAPLATU (€)',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.euro),
-                ),
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF0D47A1)),
-                onChanged: (_) => _rekalkulirajCijenu(izvorJeUkupno: true),
-              ),
-              const SizedBox(height: 24),
-
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    if (_formKey.currentState!.validate()) {
-                      final noviGost = TuristBoravak(
-                        id: DateTime.now().millisecondsSinceEpoch.toString(),
-                        nacinPlacanja: _nacinPlacanja,
-                        racunBroj: generiraniRnBr,
-                        prezimeIme: _imeCtrl.text.trim(),
-                        datumDolaska: _datumDolaska,
-                        datumOdlaska: _datumOdlaska,
-                        brojOsoba: int.tryParse(_brojOsobaCtrl.text) ?? 1,
-                        brojDana: _brojDana,
-                        cijenaUkupno: double.tryParse(_ukupnoCtrl.text.replaceAll(',', '.')) ?? 0.0,
-                        cijenaOsobaNoc: double.tryParse(_cijenaPoOsobiCtrl.text.replaceAll(',', '.')) ?? 0.0,
+            // 2. Odabir datuma dolaska i odlaska
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.calendar_today, size: 16),
+                    label: Text('Dolazak:\n${df.format(_dolazak)}', textAlign: TextAlign.center),
+                    onPressed: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: _dolazak,
+                        firstDate: DateTime(2025),
+                        lastDate: DateTime(2030),
                       );
-                      Navigator.pop(context, noviGost);
-                    }
-                  },
-                  icon: const Icon(Icons.check),
-                  label: const Text('SPREMI I DODAJ NA POPIS', style: TextStyle(fontSize: 16)),
+                      if (picked != null) {
+                        setState(() {
+                          _dolazak = picked;
+                          if (_odlazak.isBefore(_dolazak)) {
+                            _odlazak = _dolazak.add(const Duration(days: 1));
+                          }
+                          _preracunajCijenuPremaDatumu();
+                        });
+                      }
+                    },
+                  ),
                 ),
-              ),
-            ],
-          ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.event, size: 16),
+                    label: Text('Odlazak:\n${df.format(_odlazak)}', textAlign: TextAlign.center),
+                    onPressed: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: _odlazak,
+                        firstDate: _dolazak.add(const Duration(days: 1)),
+                        lastDate: DateTime(2030),
+                      );
+                      if (picked != null) setState(() => _odlazak = picked);
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // Način plaćanja
+            DropdownButtonFormField<String>(
+              value: _nacinPlacanja,
+              decoration: const InputDecoration(labelText: 'Način plaćanja', border: OutlineInputBorder()),
+              items: const [
+                DropdownMenuItem(value: 'Gotovina / Cash', child: Text('Gotovina / Cash')),
+                DropdownMenuItem(value: 'Kartica / Card', child: Text('Kartica / Card')),
+                DropdownMenuItem(value: 'Booking.com', child: Text('Booking.com')),
+                DropdownMenuItem(value: 'Airbnb', child: Text('Airbnb')),
+                DropdownMenuItem(value: 'Transakcijski račun', child: Text('Transakcijski račun')),
+              ],
+              onChanged: (val) => setState(() => _nacinPlacanja = val!),
+            ),
+            const Divider(height: 32),
+
+            // 3. Popis osoba i nositelj računa
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Prijavljene osobe u apartmanu', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                TextButton.icon(
+                  onPressed: _dodajNovogGosta,
+                  icon: const Icon(Icons.person_add),
+                  label: const Text('Dodaj osobu'),
+                ),
+              ],
+            ),
+            const Text(
+              'Označite kvačicom osobu na čije ime ide račun:',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            const SizedBox(height: 8),
+
+            ..._listaGostiju.asMap().entries.map((entry) {
+              final idx = entry.key;
+              final g = entry.value;
+              return Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  child: Row(
+                    children: [
+                      Radio<int>(
+                        value: idx,
+                        groupValue: _nositeljIndex,
+                        onChanged: (val) => setState(() => _nositeljIndex = val!),
+                      ),
+                      Expanded(
+                        child: TextFormField(
+                          initialValue: g.prezimeIme,
+                          decoration: InputDecoration(
+                            labelText: idx == _nositeljIndex ? 'Nositelj računa *' : 'Osoba ${idx + 1}',
+                            isDense: true,
+                          ),
+                          onChanged: (val) => g.prezimeIme = val,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.document_scanner, color: Colors.blue),
+                        tooltip: 'OCR Skeniraj',
+                        onPressed: () => _skenirajZaGosta(idx),
+                      ),
+                      if (_listaGostiju.length > 1)
+                        IconButton(
+                          icon: const Icon(Icons.remove_circle, color: Colors.red),
+                          onPressed: () => _ukloniGosta(idx),
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+
+            const Divider(height: 32),
+
+            // 4. Kalkulacija
+            Text(
+              'Kalkulacija cijene ($_brojNoci noćenja • $_brojOsoba os.)',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _cijenaController,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                      labelText: 'Cijena os./noć (€)',
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey.shade400),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('UKUPNO (€)', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                        Text('${_ukupno.toStringAsFixed(2)} €', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blue)),
+                      ],
+                    ),
+                  ),
+                )
+              ],
+            ),
+            const SizedBox(height: 24),
+
+            ElevatedButton.icon(
+              onPressed: _spremi,
+              icon: const Icon(Icons.check),
+              label: Text(widget.postojeci == null ? 'SPREMI I DODAJE NA POPIS' : 'SPREMI IZMJENE'),
+              style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
+            ),
+          ],
         ),
       ),
     );
