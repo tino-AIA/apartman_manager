@@ -7,7 +7,9 @@ import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 import '../models/turist_model.dart';
 import '../models/postavke_model.dart';
+import '../services/podaci_service.dart';
 import '../services/kpr_export_service.dart';
+import 'novi_turist_screen.dart';
 
 class KnjigaPrometaScreen extends StatefulWidget {
   const KnjigaPrometaScreen({super.key});
@@ -17,24 +19,61 @@ class KnjigaPrometaScreen extends StatefulWidget {
 }
 
 class _KnjigaPrometaScreenState extends State<KnjigaPrometaScreen> {
+  final _service = PodaciService();
+
   final _postavke = PostavkeIznajmljivaca(
     nazivObjekta: 'Sunset Villa Brela',
     imePrezime: 'Miha Šošić',
     oib: '43163137097',
-    mjesto: 'Brela',
+    mjesto: '21322 Brela',
     adresa: 'Podrače 1',
     telefon: '+386 41 527 274',
     email: 'info@sosic-brela.com',
   );
 
-  // Učitani računi (uključujući zadnja tri za provjeru izračuna)
-  final List<TuristBoravak> _promet = [
-    TuristBoravak(id: '100', nacinPlacanja: 'Booking', racunBroj: '100/26', prezimeIme: 'Frohlich Marco', datumDolaska: DateTime(2026, 10, 3), datumOdlaska: DateTime(2026, 10, 8), brojOsoba: 3, brojDana: 5, cijenaUkupno: 580.0, cijenaOsobaNoc: 38.67),
-    TuristBoravak(id: '101', nacinPlacanja: 'Booking', racunBroj: '101/26', prezimeIme: 'Craft Hugh Jonathan', datumDolaska: DateTime(2026, 10, 9), datumOdlaska: DateTime(2026, 10, 12), brojOsoba: 2, brojDana: 3, cijenaUkupno: 190.0, cijenaOsobaNoc: 31.67),
-    TuristBoravak(id: '102', nacinPlacanja: 'Booking', racunBroj: '102/26', prezimeIme: 'Muller Gerhard', datumDolaska: DateTime(2026, 10, 10), datumOdlaska: DateTime(2026, 10, 14), brojOsoba: 2, brojDana: 4, cijenaUkupno: 250.0, cijenaOsobaNoc: 31.25),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _service.addListener(_osvjezi);
+  }
 
-  double get _ukupniPromet => _promet.fold(0.0, (sum, i) => sum + i.cijenaUkupno);
+  @override
+  void dispose() {
+    _service.removeListener(_osvjezi);
+    super.dispose();
+  }
+
+  void _osvjezi() => setState(() {});
+
+  void _potvrdiBrisanje(BuildContext context, TuristBoravak b) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Potvrda brisanja iz Knjige EP'),
+        content: Text(
+          'Sigurno želite obrisati stavku "${b.prezimeIme}" (Račun ${b.racunBroj})?\n\n'
+          'Redni brojevi u Knjizi prometa i svi računi iza njega automatski će se renumerirati (npr. račun 4 postaje 3).',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Odustani'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () {
+              _service.obrisiBoravak(b.id);
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Stavka obrisana. Knjiga prometa je renumerirana.')),
+              );
+            },
+            child: const Text('Obriši', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
 
   void _izveziPdf() {
     Navigator.push(
@@ -44,7 +83,7 @@ class _KnjigaPrometaScreenState extends State<KnjigaPrometaScreen> {
           appBar: AppBar(title: const Text('Obrazac EP - Pregled PDF-a')),
           body: PdfPreview(
             build: (format) => KprExportService.generirajKprPdf(
-              stavke: _promet,
+              stavke: _service.boravci,
               postavke: _postavke,
               godina: 2026,
             ),
@@ -56,7 +95,7 @@ class _KnjigaPrometaScreenState extends State<KnjigaPrometaScreen> {
 
   Future<void> _izveziExcel() async {
     final bytes = KprExportService.generirajKprExcel(
-      stavke: _promet,
+      stavke: _service.boravci,
       postavke: _postavke,
       godina: 2026,
     );
@@ -72,6 +111,8 @@ class _KnjigaPrometaScreenState extends State<KnjigaPrometaScreen> {
   @override
   Widget build(BuildContext context) {
     final df = DateFormat('dd.MM.yyyy.');
+    final promet = _service.boravci;
+    final ukupniPromet = promet.fold<double>(0.0, (sum, i) => sum + i.cijenaUkupno);
 
     return Scaffold(
       appBar: AppBar(
@@ -81,12 +122,12 @@ class _KnjigaPrometaScreenState extends State<KnjigaPrometaScreen> {
           IconButton(
             icon: const Icon(Icons.table_view, color: Colors.green),
             tooltip: 'Izvezi u Excel (.xlsx)',
-            onPressed: _izveziExcel,
+            onPressed: promet.isEmpty ? null : _izveziExcel,
           ),
           IconButton(
             icon: const Icon(Icons.picture_as_pdf, color: Colors.red),
             tooltip: 'Službeni A4 PDF',
-            onPressed: _izveziPdf,
+            onPressed: promet.isEmpty ? null : _izveziPdf,
           ),
         ],
       ),
@@ -113,7 +154,10 @@ class _KnjigaPrometaScreenState extends State<KnjigaPrometaScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     const Text('UKUPAN PROMET 2026:', style: TextStyle(fontWeight: FontWeight.bold)),
-                    Text('${_ukupniPromet.toStringAsFixed(2)} €', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF0D47A1))),
+                    Text(
+                      '${ukupniPromet.toStringAsFixed(2)} €',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF0D47A1)),
+                    ),
                   ],
                 ),
               ],
@@ -123,19 +167,80 @@ class _KnjigaPrometaScreenState extends State<KnjigaPrometaScreen> {
 
           // Popis stavki prometa
           Expanded(
-            child: ListView.separated(
-              itemCount: _promet.length,
-              separatorBuilder: (_, __) => const Divider(height: 1),
-              itemBuilder: (context, index) {
-                final s = _promet[index];
-                return ListTile(
-                  leading: Text('${index + 1}.', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
-                  title: Text(s.prezimeIme, style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Text('RN ${s.racunBroj} • ${df.format(s.datumDolaska)}'),
-                  trailing: Text('${s.cijenaUkupno.toStringAsFixed(2)} €', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                );
-              },
-            ),
+            child: promet.isEmpty
+                ? const Center(
+                    child: Text(
+                      'Knjiga prometa je prazna.\nUnesite boravke na popisu turista.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.grey, fontSize: 16),
+                    ),
+                  )
+                : ListView.separated(
+                    itemCount: promet.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final s = promet[index];
+                      final redniBroj = index + 1;
+                      return ListTile(
+                        leading: CircleAvatar(
+                          radius: 14,
+                          backgroundColor: Colors.grey.shade300,
+                          child: Text(
+                            '$redniBroj',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.black87),
+                          ),
+                        ),
+                        title: Text(s.prezimeIme, style: const TextStyle(fontWeight: FontWeight.bold)),
+                        subtitle: Text('RN ${s.racunBroj} • ${df.format(s.datumDolaska)} • ${s.apartmanNaziv}'),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '${s.cijenaUkupno.toStringAsFixed(2)} €',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                            ),
+                            PopupMenuButton<String>(
+                              icon: const Icon(Icons.more_vert),
+                              onSelected: (val) {
+                                if (val == 'uredi') {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => NoviTuristScreen(postojeci: s),
+                                    ),
+                                  );
+                                } else if (val == 'obrisi') {
+                                  _potvrdiBrisanje(context, s);
+                                }
+                              },
+                              itemBuilder: (_) => [
+                                const PopupMenuItem(
+                                  value: 'uredi',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.edit, size: 18, color: Colors.blue),
+                                      SizedBox(width: 8),
+                                      Text('Uredi'),
+                                    ],
+                                  ),
+                                ),
+                                const PopupMenuItem(
+                                  value: 'obrisi',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.delete, size: 18, color: Colors.red),
+                                      SizedBox(width: 8),
+                                      Text('Obriši', style: TextStyle(color: Colors.red)),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
           ),
         ],
       ),
