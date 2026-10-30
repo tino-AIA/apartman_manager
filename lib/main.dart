@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'screens/postavke_screen.dart';
 import 'screens/turisti_screen.dart';
+import 'screens/racuni_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -38,8 +39,8 @@ class _GlavniEkranState extends State<GlavniEkran> {
   int _odabraniIndeks = 0;
 
   final List<Widget> _ekrani = [
-    const TuristiScreen(), // Povezan modul Popis turista & Skeniranje
-    const Center(child: Text('Izdavanje Računa & Print (Uskoro)')),
+    const TuristiScreen(), // Modul Popis turista & Skeniranje
+    const RacuniScreen(),  // Povezan modul Izdavanje Računa & Print
     const Center(child: Text('Knjiga prometa - Obrazac EP (Uskoro)')),
     const PostavkeScreen(),
   ];
