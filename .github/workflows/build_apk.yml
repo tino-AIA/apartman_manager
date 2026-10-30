@@ -19,22 +19,27 @@ jobs:
           distribution: 'zulu'
           java-version: '17'
 
-      # Koristimo provjereni stabilni Flutter 3.22.2
+      # Vraćamo Flutter 3.24.x koji ima SurfaceProducer.Callback za kameru
       - name: Postavljanje Fluttera
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.22.2'
+          flutter-version: '3.24.x'
           channel: 'stable'
 
-      # Generiranje Android predloška
       - name: Generiranje Android projekta
         run: flutter create . --platforms=android --org com.apartmani
 
-      # Postavljanje minSdkVersion 21 (potrebno za ML Kit kameru)
-      - name: Podešavanje minSdkVersion
+      # Rješavanje compileSdk i app_links kompatibilnosti
+      - name: Konfiguracija Android Gradle postavki
         run: |
+          sed -i 's/compileSdkVersion = flutter.compileSdkVersion/compileSdkVersion = 34/g' android/app/build.gradle
+          sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 34/g' android/app/build.gradle
           sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/g' android/app/build.gradle
           sed -i 's/minSdkVersion = flutter.minSdkVersion/minSdkVersion = 21/g' android/app/build.gradle
+          sed -i 's/targetSdkVersion flutter.targetSdkVersion/targetSdkVersion 34/g' android/app/build.gradle
+          sed -i 's/targetSdkVersion = flutter.targetSdkVersion/targetSdkVersion = 34/g' android/app/build.gradle
+          # Dodavanje fallback compileSdk-a za starije plugine poput app_links
+          echo "android.compileSdkVersion=34" >> android/gradle.properties
 
       - name: Instalacija paketa
         run: flutter pub get
