@@ -31,14 +31,26 @@ jobs:
       - name: Instalacija paketa
         run: flutter pub get
 
-      # 1. Popravak build.gradle unutar samog app_links paketa u pub cacheu
-      # 2. Podešavanje minSdkVersion i compileSdkVersion u glavnoj aplikaciji
-      - name: Zakrpa za Gradle i app_links
+      # Popravak: izravna zamjena spornog poziva u app_links i postavljanje SDK verzija
+      - name: Zakrpa za app_links i Android SDK
         run: |
-          # Popravak linije koja ruši app_links
-          find /home/runner/.pub-cache/hosted/pub.dev/ -name "build.gradle" -path "*/app_links*/*" -exec sed -i 's/.*compileSdkVersion.*flutter.*/    compileSdkVersion 34/g' {} +
-          
-          # Podešavanje glavnog app/build.gradle
+          # 1. Pronađi točnu datoteku app_links/android/build.gradle i zamijeni sporni redak
+          python3 -c '
+          import glob, os
+
+          pattern = os.path.expanduser("~/.pub-cache/hosted/pub.dev/app_links-*/android/build.gradle")
+          for path in glob.glob(pattern):
+              with open(path, "r") as f:
+                  content = f.read()
+              # Zamjenjuje problematični poziv sigurnim brojem 34
+              new_content = content.replace("project.android.flutter.compileSdkVersion.toInteger()", "34")
+              new_content = new_content.replace("project.android.flutter.compileSdkVersion", "34")
+              with open(path, "w") as f:
+                  f.write(new_content)
+              print(f"Zakrpan: {path}")
+          '
+
+          # 2. Podešavanje minSdkVersion i compileSdkVersion u android/app/build.gradle
           sed -i 's/compileSdkVersion = flutter.compileSdkVersion/compileSdkVersion = 34/g' android/app/build.gradle
           sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 34/g' android/app/build.gradle
           sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/g' android/app/build.gradle
