@@ -21,9 +21,6 @@ dependencies:
   google_mlkit_text_recognition: ^0.13.0
   permission_handler: ^11.3.1
 
-  # Termalni printeri (Bluetooth i Wi-Fi ESC/POS)
-  flutter_pos_printer_platform: ^2.3.1
-
   # Generiranje i dijeljenje PDF računa / Excel izvoza
   pdf: ^3.11.1
   printing: ^5.13.2
