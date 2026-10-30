@@ -1,0 +1,38 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout koda
+        uses: actions/checkout@v4
+
+      - name: Postavljanje Jave
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Postavljanje Fluttera
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.x'
+          channel: 'stable'
+
+      - name: Instalacija paketa
+        run: flutter pub get
+
+      - name: Izrada APK instalacije
+        run: flutter build apk --release
+
+      - name: Spremanje gotovog APK-a
+        uses: actions/upload-artifact@v4
+        with:
+          name: apartman-manager-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
