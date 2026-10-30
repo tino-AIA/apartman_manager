@@ -28,13 +28,23 @@ jobs:
       - name: Generiranje Android projekta
         run: flutter create . --platforms=android --org com.apartmani
 
-      - name: Podešavanje Android SDK verzija
-        run: |
-          sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/g' android/app/build.gradle
-          sed -i 's/minSdkVersion = flutter.minSdkVersion/minSdkVersion = 21/g' android/app/build.gradle
-
       - name: Instalacija paketa
         run: flutter pub get
+
+      # 1. Popravak build.gradle unutar samog app_links paketa u pub cacheu
+      # 2. Podešavanje minSdkVersion i compileSdkVersion u glavnoj aplikaciji
+      - name: Zakrpa za Gradle i app_links
+        run: |
+          # Popravak linije koja ruši app_links
+          find /home/runner/.pub-cache/hosted/pub.dev/ -name "build.gradle" -path "*/app_links*/*" -exec sed -i 's/.*compileSdkVersion.*flutter.*/    compileSdkVersion 34/g' {} +
+          
+          # Podešavanje glavnog app/build.gradle
+          sed -i 's/compileSdkVersion = flutter.compileSdkVersion/compileSdkVersion = 34/g' android/app/build.gradle
+          sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 34/g' android/app/build.gradle
+          sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/g' android/app/build.gradle
+          sed -i 's/minSdkVersion = flutter.minSdkVersion/minSdkVersion = 21/g' android/app/build.gradle
+          sed -i 's/targetSdkVersion flutter.targetSdkVersion/targetSdkVersion 34/g' android/app/build.gradle
+          sed -i 's/targetSdkVersion = flutter.targetSdkVersion/targetSdkVersion = 34/g' android/app/build.gradle
 
       - name: Izrada APK instalacije
         run: flutter build apk --release
