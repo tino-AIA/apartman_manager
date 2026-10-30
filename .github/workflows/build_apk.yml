@@ -31,45 +31,25 @@ jobs:
       - name: Instalacija paketa
         run: flutter pub get
 
-      - name: Zakrpa za app_links, SDK i ProGuard (R8)
+      - name: Podešavanje Android SDK i Gradle postavki
         run: |
-          # 1. Popravak app_links build.gradle ako postoji
+          # 1. Popravak app_links ako postoji stari build.gradle
           find /home/runner/ -name "build.gradle" 2>/dev/null | grep "app_links" | while read -r file; do
-            echo "Krpanje app_links: $file"
             sed -i 's/project.android.flutter.compileSdkVersion.toInteger()/34/g' "$file"
             sed -i 's/project.android.flutter.compileSdkVersion/34/g' "$file"
           done
 
-          # 2. Podešavanje minSdkVersion na 21
+          # 2. Podešavanje minSdkVersion na 21 za ML Kit kameru
           find android/app/ -name "build.gradle*" | while read -r file; do
-            echo "Podešavanje SDK u: $file"
             sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/g' "$file"
             sed -i 's/minSdkVersion = flutter.minSdkVersion/minSdkVersion = 21/g' "$file"
             sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 21/g' "$file"
           done
 
-          # 3. Postavljanje AndroidX oznaka
+          # 3. Postavljanje AndroidX svojstava
           echo "android.useAndroidX=true" >> android/gradle.properties
           echo "android.enableJetifier=true" >> android/gradle.properties
 
-          # 4. ProGuard / R8 pravila za ML Kit (rješava Missing class grešku)
-          mkdir -p android/app
-          cat << 'EOF' > android/app/proguard-rules.pro
-          -dontwarn com.google.mlkit.**
-          -keep class com.google.mlkit.** { *; }
-          -dontwarn io.flutter.plugin.common.**
-          EOF
-
-          # Dodavanje ProGuard pravila u build.gradle / build.gradle.kts
-          find android/app/ -name "build.gradle*" | while read -r file; do
-            if grep -q "proguardFiles" "$file"; then
-              echo "ProGuard već konfiguriran u $file"
-            else
-              sed -i 's/buildTypes {/buildTypes {\n        release {\n            proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"\n        }/g' "$file" || true
-            fi
-          done
-
-      # Izrada APK-a bez obfuskacije/minifikacije (najbrža i najstabilnija opcija za testiranje)
       - name: Izrada APK instalacije
         run: flutter build apk --release --no-shrink
 
