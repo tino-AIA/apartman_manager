@@ -19,44 +19,35 @@ jobs:
           distribution: 'zulu'
           java-version: '17'
 
+      # Najnoviji stabilni Flutter koji nativno rješava Flutter Gradle AGP 8+ kompatibilnost
       - name: Postavljanje Fluttera
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.24.x'
           channel: 'stable'
+          cache: true
 
+      # Generiramo samo nedostajuću Android platformsku mapu
       - name: Generiranje Android projekta
-        run: flutter create . --platforms=android --org com.apartmani
+        run: flutter create . --platforms=android --org com.apartmani --project-name apartman_manager
+
+      - name: Podešavanje Android SDK verzija
+        run: |
+          sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/g' android/app/build.gradle
+          sed -i 's/minSdkVersion = flutter.minSdkVersion/minSdkVersion = 21/g' android/app/build.gradle
+          echo "android.useAndroidX=true" >> android/gradle.properties
+          echo "android.enableJetifier=true" >> android/gradle.properties
 
       - name: Instalacija paketa
         run: flutter pub get
 
-      # Popravak: izravna zamjena spornog poziva u app_links i postavljanje SDK verzija
-      - name: Zakrpa za app_links i Android SDK
+      # Izravno presretanje i zamjena sporne linije u CI pub-cacheu
+      - name: Zakrpa za app_links
         run: |
-          # 1. Pronađi točnu datoteku app_links/android/build.gradle i zamijeni sporni redak
-          python3 -c '
-          import glob, os
-
-          pattern = os.path.expanduser("~/.pub-cache/hosted/pub.dev/app_links-*/android/build.gradle")
-          for path in glob.glob(pattern):
-              with open(path, "r") as f:
-                  content = f.read()
-              # Zamjenjuje problematični poziv sigurnim brojem 34
-              new_content = content.replace("project.android.flutter.compileSdkVersion.toInteger()", "34")
-              new_content = new_content.replace("project.android.flutter.compileSdkVersion", "34")
-              with open(path, "w") as f:
-                  f.write(new_content)
-              print(f"Zakrpan: {path}")
-          '
-
-          # 2. Podešavanje minSdkVersion i compileSdkVersion u android/app/build.gradle
-          sed -i 's/compileSdkVersion = flutter.compileSdkVersion/compileSdkVersion = 34/g' android/app/build.gradle
-          sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 34/g' android/app/build.gradle
-          sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/g' android/app/build.gradle
-          sed -i 's/minSdkVersion = flutter.minSdkVersion/minSdkVersion = 21/g' android/app/build.gradle
-          sed -i 's/targetSdkVersion flutter.targetSdkVersion/targetSdkVersion 34/g' android/app/build.gradle
-          sed -i 's/targetSdkVersion = flutter.targetSdkVersion/targetSdkVersion = 34/g' android/app/build.gradle
+          find /home/runner/ -name "build.gradle" 2>/dev/null | grep "app_links" | while read -r file; do
+            echo "Pronadjen: $file"
+            sed -i 's/project.android.flutter.compileSdkVersion.toInteger()/34/g' "$file"
+            sed -i 's/project.android.flutter.compileSdkVersion/34/g' "$file"
+          done
 
       - name: Izrada APK instalacije
         run: flutter build apk --release
