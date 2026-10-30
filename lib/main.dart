@@ -1,12 +1,21 @@
 // lib/main.dart
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'core/supabase_config.dart';
 import 'screens/postavke_screen.dart';
 import 'screens/turisti_screen.dart';
 import 'screens/racuni_screen.dart';
 import 'screens/knjiga_prometa_screen.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Inicijalizacija Supabase veze s bazom
+  await Supabase.initialize(
+    url: SupabaseConfig.url,
+    anonKey: SupabaseConfig.anonKey,
+  );
+
   runApp(const ApartmanApp());
 }
 
@@ -40,7 +49,7 @@ class _GlavniEkranState extends State<GlavniEkran> {
   int _odabraniIndeks = 0;
 
   final List<Widget> _ekrani = [
-    const TuristiScreen(),        // Popis turista & OCR skeniranje
+    const TuristiScreen(),        // Popis turista & OCR skeniranje (povezano s bazom)
     const RacuniScreen(),         // Izdavanje računa & Print (A4 PDF + 58mm)
     const KnjigaPrometaScreen(),  // Knjiga prometa (Obrazac EP) & Excel/PDF izvoz
     const PostavkeScreen(),       // Postavke vlasnika & Sezonski cjenici
