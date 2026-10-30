@@ -19,35 +19,39 @@ jobs:
           distribution: 'zulu'
           java-version: '17'
 
-      # Najnoviji stabilni Flutter koji nativno rješava Flutter Gradle AGP 8+ kompatibilnost
       - name: Postavljanje Fluttera
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
           cache: true
 
-      # Generiramo samo nedostajuću Android platformsku mapu
       - name: Generiranje Android projekta
-        run: flutter create . --platforms=android --org com.apartmani --project-name apartman_manager
-
-      - name: Podešavanje Android SDK verzija
         run: |
-          sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/g' android/app/build.gradle
-          sed -i 's/minSdkVersion = flutter.minSdkVersion/minSdkVersion = 21/g' android/app/build.gradle
-          echo "android.useAndroidX=true" >> android/gradle.properties
-          echo "android.enableJetifier=true" >> android/gradle.properties
+          flutter create . --platforms=android --org com.apartmani
 
       - name: Instalacija paketa
         run: flutter pub get
 
-      # Izravno presretanje i zamjena sporne linije u CI pub-cacheu
-      - name: Zakrpa za app_links
+      - name: Zakrpa za app_links i Android SDK
         run: |
+          # 1. Popravak app_links build.gradle ako postoji
           find /home/runner/ -name "build.gradle" 2>/dev/null | grep "app_links" | while read -r file; do
-            echo "Pronadjen: $file"
+            echo "Krpanje app_links: $file"
             sed -i 's/project.android.flutter.compileSdkVersion.toInteger()/34/g' "$file"
             sed -i 's/project.android.flutter.compileSdkVersion/34/g' "$file"
           done
+
+          # 2. Podešavanje minSdkVersion na 21 u app modulu (podržava i .gradle i .gradle.kts)
+          find android/app/ -name "build.gradle*" | while read -r file; do
+            echo "Podešavanje SDK u: $file"
+            sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/g' "$file"
+            sed -i 's/minSdkVersion = flutter.minSdkVersion/minSdkVersion = 21/g' "$file"
+            sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 21/g' "$file"
+          done
+
+          # 3. Postavljanje AndroidX oznaka
+          echo "android.useAndroidX=true" >> android/gradle.properties
+          echo "android.enableJetifier=true" >> android/gradle.properties
 
       - name: Izrada APK instalacije
         run: flutter build apk --release
