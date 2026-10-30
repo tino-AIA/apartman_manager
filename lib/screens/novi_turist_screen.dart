@@ -6,7 +6,7 @@ import '../services/podaci_service.dart';
 import '../services/ocr_service.dart';
 
 class NoviTuristScreen extends StatefulWidget {
-  final TuristBoravak? postojeci; // Ako uređujemo
+  final TuristBoravak? postojeci;
   const NoviTuristScreen({super.key, this.postojeci});
 
   @override
@@ -190,7 +190,7 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
             ),
             const SizedBox(height: 12),
 
-            // 2. Odabir datuma dolaska i odlaska
+            // 2. Odabir datuma
             Row(
               children: [
                 Expanded(
@@ -360,4 +360,70 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
               );
             }),
 
-            const
+            const Divider(height: 32),
+
+            // 4. Kalkulacija cijene
+            Text(
+              'Kalkulacija cijene ($_brojNoci noćenja • $_brojOsoba os.)',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _cijenaController,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                      labelText: 'Cijena os./noć (€)',
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey.shade400),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('UKUPNO (€)',
+                            style: TextStyle(fontSize: 10, color: Colors.grey)),
+                        Text(
+                          '${_ukupno.toStringAsFixed(2)} €',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              ],
+            ),
+            const SizedBox(height: 24),
+
+            ElevatedButton.icon(
+              onPressed: _spremi,
+              icon: const Icon(Icons.check),
+              label: Text(widget.postojeci == null
+                  ? 'SPREMI I DODAJE NA POPIS'
+                  : 'SPREMI IZMJENE'),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
