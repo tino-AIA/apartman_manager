@@ -1,69 +1,83 @@
 // lib/models/turist_model.dart
 
+class GostStavka {
+  String prezimeIme;
+  String brojDokumenta;
+  bool nositeljRacuna;
+
+  GostStavka({
+    required this.prezimeIme,
+    this.brojDokumenta = '',
+    this.nositeljRacuna = false,
+  });
+
+  Map<String, dynamic> toMap() => {
+    'prezimeIme': prezimeIme,
+    'brojDokumenta': brojDokumenta,
+    'nositeljRacuna': nositeljRacuna,
+  };
+}
+
 class TuristBoravak {
   final String id;
-  final String nacinPlacanja; // 'Booking', 'Gotovina / Cash', 'Transakcijski račun / Bank transfer', 'Airbnb'
-  final String racunBroj;     // npr. "102/26"
-  final String prezimeIme;
-  final String? drzavljanstvo;
-  final String? brojIsprave;
+  final String apartmanNaziv;
+  final String prezimeIme; // Glavni gost / nositelj računa
+  final List<GostStavka> gosti;
   final DateTime datumDolaska;
   final DateTime datumOdlaska;
-  final int brojOsoba;
   final int brojDana;
-  final double cijenaUkupno;
+  final int brojOsoba;
   final double cijenaOsobaNoc;
+  final double cijenaUkupno;
+  final String nacinPlacanja;
+  final String racunBroj;
   final bool racunIspisan;
 
   TuristBoravak({
     required this.id,
-    required this.nacinPlacanja,
-    required this.racunBroj,
+    this.apartmanNaziv = 'Apartman A1',
     required this.prezimeIme,
-    this.drzavljanstvo,
-    this.brojIsprave,
+    List<GostStavka>? gosti,
     required this.datumDolaska,
     required this.datumOdlaska,
-    required this.brojOsoba,
     required this.brojDana,
-    required this.cijenaUkupno,
+    required this.brojOsoba,
     required this.cijenaOsobaNoc,
+    required this.cijenaUkupno,
+    required this.nacinPlacanja,
+    required this.racunBroj,
     this.racunIspisan = false,
-  });
+  }) : gosti = gosti ?? [GostStavka(prezimeIme: prezimeIme, nositeljRacuna: true)];
 
-  Map<String, dynamic> toMap() {
-    return {
-      'id': id,
-      'nacinPlacanja': nacinPlacanja,
-      'racunBroj': racunBroj,
-      'prezimeIme': prezimeIme,
-      'drzavljanstvo': drzavljanstvo,
-      'brojIsprave': brojIsprave,
-      'datumDolaska': datumDolaska.toIso8601String(),
-      'datumOdlaska': datumOdlaska.toIso8601String(),
-      'brojOsoba': brojOsoba,
-      'brojDana': brojDana,
-      'cijenaUkupno': cijenaUkupno,
-      'cijenaOsobaNoc': cijenaOsobaNoc,
-      'racunIspisan': racunIspisan,
-    };
-  }
-
-  factory TuristBoravak.fromMap(Map<String, dynamic> map) {
+  TuristBoravak copyWith({
+    String? id,
+    String? apartmanNaziv,
+    String? prezimeIme,
+    List<GostStavka>? gosti,
+    DateTime? datumDolaska,
+    DateTime? datumOdlaska,
+    int? brojDana,
+    int? brojOsoba,
+    double? cijenaOsobaNoc,
+    double? cijenaUkupno,
+    String? nacinPlacanja,
+    String? racunBroj,
+    bool? racunIspisan,
+  }) {
     return TuristBoravak(
-      id: map['id'],
-      nacinPlacanja: map['nacinPlacanja'],
-      racunBroj: map['racunBroj'],
-      prezimeIme: map['prezimeIme'],
-      drzavljanstvo: map['drzavljanstvo'],
-      brojIsprave: map['brojIsprave'],
-      datumDolaska: DateTime.parse(map['datumDolaska']),
-      datumOdlaska: DateTime.parse(map['datumOdlaska']),
-      brojOsoba: map['brojOsoba'],
-      brojDana: map['brojDana'],
-      cijenaUkupno: (map['cijenaUkupno'] as num).toDouble(),
-      cijenaOsobaNoc: (map['cijenaOsobaNoc'] as num).toDouble(),
-      racunIspisan: map['racunIspisan'] ?? false,
+      id: id ?? this.id,
+      apartmanNaziv: apartmanNaziv ?? this.apartmanNaziv,
+      prezimeIme: prezimeIme ?? this.prezimeIme,
+      gosti: gosti ?? this.gosti,
+      datumDolaska: datumDolaska ?? this.datumDolaska,
+      datumOdlaska: datumOdlaska ?? this.datumOdlaska,
+      brojDana: brojDana ?? this.brojDana,
+      brojOsoba: brojOsoba ?? this.brojOsoba,
+      cijenaOsobaNoc: cijenaOsobaNoc ?? this.cijenaOsobaNoc,
+      cijenaUkupno: cijenaUkupno ?? this.cijenaUkupno,
+      nacinPlacanja: nacinPlacanja ?? this.nacinPlacanja,
+      racunBroj: racunBroj ?? this.racunBroj,
+      racunIspisan: racunIspisan ?? this.racunIspisan,
     );
   }
 }
