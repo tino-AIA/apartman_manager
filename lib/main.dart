@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/supabase_config.dart';
+import 'services/podaci_service.dart';
 import 'screens/postavke_screen.dart';
 import 'screens/turisti_screen.dart';
 import 'screens/racuni_screen.dart';
@@ -15,6 +16,9 @@ void main() async {
     url: SupabaseConfig.url,
     anonKey: SupabaseConfig.anonKey,
   );
+
+  // Učitavanje boravaka i prometa iz Supabase baze pri pokretanju
+  await PodaciService().ucitajIzSupabase();
 
   runApp(const ApartmanApp());
 }
@@ -48,11 +52,11 @@ class GlavniEkran extends StatefulWidget {
 class _GlavniEkranState extends State<GlavniEkran> {
   int _odabraniIndeks = 0;
 
-  final List<Widget> _ekrani = [
-    const TuristiScreen(),        // Popis turista & OCR skeniranje (povezano s bazom)
-    const RacuniScreen(),         // Izdavanje računa & Print (A4 PDF + 58mm)
-    const KnjigaPrometaScreen(),  // Knjiga prometa (Obrazac EP) & Excel/PDF izvoz
-    const PostavkeScreen(),       // Postavke vlasnika & Sezonski cjenici
+  final List<Widget> _ekrani = const [
+    TuristiScreen(),        // Popis turista & OCR skeniranje (povezano s bazom)
+    RacuniScreen(),         // Izdavanje računa & Print (A4 PDF + 58mm)
+    KnjigaPrometaScreen(),  // Knjiga prometa (Obrazac EP) & Excel/PDF izvoz
+    PostavkeScreen(),       // Postavke vlasnika & Sezonski cjenici
   ];
 
   @override
