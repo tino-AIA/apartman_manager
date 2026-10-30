@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'screens/postavke_screen.dart';
 import 'screens/turisti_screen.dart';
 import 'screens/racuni_screen.dart';
+import 'screens/knjiga_prometa_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -39,10 +40,10 @@ class _GlavniEkranState extends State<GlavniEkran> {
   int _odabraniIndeks = 0;
 
   final List<Widget> _ekrani = [
-    const TuristiScreen(), // Modul Popis turista & Skeniranje
-    const RacuniScreen(),  // Povezan modul Izdavanje Računa & Print
-    const Center(child: Text('Knjiga prometa - Obrazac EP (Uskoro)')),
-    const PostavkeScreen(),
+    const TuristiScreen(),        // Popis turista & OCR skeniranje
+    const RacuniScreen(),         // Izdavanje računa & Print (A4 PDF + 58mm)
+    const KnjigaPrometaScreen(),  // Knjiga prometa (Obrazac EP) & Excel/PDF izvoz
+    const PostavkeScreen(),       // Postavke vlasnika & Sezonski cjenici
   ];
 
   @override
