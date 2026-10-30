@@ -1,6 +1,7 @@
 // lib/main.dart
 import 'package:flutter/material.dart';
 import 'screens/postavke_screen.dart';
+import 'screens/turisti_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -37,7 +38,7 @@ class _GlavniEkranState extends State<GlavniEkran> {
   int _odabraniIndeks = 0;
 
   final List<Widget> _ekrani = [
-    const Center(child: Text('Popis turista & Skeniranje (Uskoro)')),
+    const TuristiScreen(), // Povezan modul Popis turista & Skeniranje
     const Center(child: Text('Izdavanje Računa & Print (Uskoro)')),
     const Center(child: Text('Knjiga prometa - Obrazac EP (Uskoro)')),
     const PostavkeScreen(),
@@ -51,10 +52,26 @@ class _GlavniEkranState extends State<GlavniEkran> {
         selectedIndex: _odabraniIndeks,
         onDestinationSelected: (idx) => setState(() => _odabraniIndeks = idx),
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.people_alt_outlined), selectedIcon: Icon(Icons.people_alt), label: 'Turisti'),
-          NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: 'Računi'),
-          NavigationDestination(icon: Icon(Icons.menu_book_outlined), selectedIcon: Icon(Icons.menu_book), label: 'Knjiga EP'),
-          NavigationDestination(icon: Icon(Icons.settings_outlined), selectedIcon: Icon(Icons.settings), label: 'Postavke'),
+          NavigationDestination(
+            icon: Icon(Icons.people_alt_outlined),
+            selectedIcon: Icon(Icons.people_alt),
+            label: 'Turisti',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.receipt_long_outlined),
+            selectedIcon: Icon(Icons.receipt_long),
+            label: 'Računi',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.menu_book_outlined),
+            selectedIcon: Icon(Icons.menu_book),
+            label: 'Knjiga EP',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.settings_outlined),
+            selectedIcon: Icon(Icons.settings),
+            label: 'Postavke',
+          ),
         ],
       ),
     );
