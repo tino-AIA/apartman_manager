@@ -19,35 +19,22 @@ jobs:
           distribution: 'zulu'
           java-version: '17'
 
+      # Koristimo provjereni stabilni Flutter 3.22.2
       - name: Postavljanje Fluttera
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.24.x'
+          flutter-version: '3.22.2'
           channel: 'stable'
 
+      # Generiranje Android predloška
       - name: Generiranje Android projekta
         run: flutter create . --platforms=android --org com.apartmani
 
-      # Rješava kompatibilnost za app_links i sve plugin biblioteke
-      - name: Postavljanje Gradle kompatibilnosti za plugine
+      # Postavljanje minSdkVersion 21 (potrebno za ML Kit kameru)
+      - name: Podešavanje minSdkVersion
         run: |
-          cat << 'EOF' >> android/build.gradle
-
-          subprojects {
-              afterEvaluate { project ->
-                  if (project.hasProperty('android')) {
-                      project.android {
-                          compileSdkVersion 34
-                          buildToolsVersion '34.0.0'
-                          defaultConfig {
-                              minSdkVersion 21
-                              targetSdkVersion 34
-                          }
-                      }
-                  }
-              }
-          }
-          EOF
+          sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/g' android/app/build.gradle
+          sed -i 's/minSdkVersion = flutter.minSdkVersion/minSdkVersion = 21/g' android/app/build.gradle
 
       - name: Instalacija paketa
         run: flutter pub get
