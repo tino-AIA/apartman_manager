@@ -31,27 +31,39 @@ jobs:
       - name: Instalacija paketa
         run: flutter pub get
 
-      - name: Podešavanje Android SDK i Gradle postavki
+      - name: Podešavanje Android SDK i isključivanje R8
         run: |
-          # 1. Popravak app_links ako postoji stari build.gradle
-          find /home/runner/ -name "build.gradle" 2>/dev/null | grep "app_links" | while read -r file; do
-            sed -i 's/project.android.flutter.compileSdkVersion.toInteger()/34/g' "$file"
-            sed -i 's/project.android.flutter.compileSdkVersion/34/g' "$file"
-          done
-
-          # 2. Podešavanje minSdkVersion na 21 za ML Kit kameru
+          # 1. Podešavanje minSdkVersion na 21 za ML Kit kameru
           find android/app/ -name "build.gradle*" | while read -r file; do
             sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/g' "$file"
             sed -i 's/minSdkVersion = flutter.minSdkVersion/minSdkVersion = 21/g' "$file"
             sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 21/g' "$file"
           done
 
-          # 3. Postavljanje AndroidX svojstava
+          # 2. Onemogućavanje R8 minifikacije u build.gradle.kts
+          python3 -c '
+          import os
+
+          path = "android/app/build.gradle.kts"
+          if os.path.exists(path):
+              with open(path, "r") as f:
+                  content = f.read()
+
+              # Isključujemo minifikaciju i shrink unutar buildTypes bloka
+              content = content.replace("getByName(\"release\") {", "getByName(\"release\") {\n            isMinifyEnabled = false\n            isShrinkResources = false")
+              content = content.replace("release {", "release {\n            isMinifyEnabled = false\n            isShrinkResources = false")
+
+              with open(path, "w") as f:
+                  f.write(content)
+              print("R8 uspješno isključen u build.gradle.kts")
+          '
+
+          # 3. Postavljanje AndroidX oznaka
           echo "android.useAndroidX=true" >> android/gradle.properties
           echo "android.enableJetifier=true" >> android/gradle.properties
 
       - name: Izrada APK instalacije
-        run: flutter build apk --release --no-shrink
+        run: flutter build apk --release
 
       - name: Spremanje gotovog APK-a
         uses: actions/upload-artifact@v4
