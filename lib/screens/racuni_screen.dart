@@ -14,7 +14,6 @@ class RacuniScreen extends StatefulWidget {
 }
 
 class _RacuniScreenState extends State<RacuniScreen> {
-  // Podaci vlasnika iz Postavki (default Sunset Villa Brela)
   final _postavke = PostavkeIznajmljivaca(
     nazivObjekta: 'Sunset Villa Brela',
     imePrezime: 'Miha Šošić',
@@ -25,7 +24,6 @@ class _RacuniScreenState extends State<RacuniScreen> {
     email: 'info@sosic-brela.com',
   );
 
-  // Primjeri gotovih računa iz vaše tablice (100, 101, 102)
   final List<TuristBoravak> _racuni = [
     TuristBoravak(
       id: '102',
@@ -68,7 +66,6 @@ class _RacuniScreenState extends State<RacuniScreen> {
     ),
   ];
 
-  // Prikaz A4 PDF računa s opcijama dijeljenja i printanja
   void _otvoriPdf(TuristBoravak boravak) {
     Navigator.push(
       context,
@@ -86,7 +83,6 @@ class _RacuniScreenState extends State<RacuniScreen> {
     );
   }
 
-  // Pretpregled za termalni 58 mm pisač
   void _prikaziTermoIspis(TuristBoravak boravak) {
     final termoTekst = EscPosPrinterService.formatirajZa58mm(
       boravak: boravak,
@@ -100,7 +96,7 @@ class _RacuniScreenState extends State<RacuniScreen> {
         content: SingleChildScrollView(
           child: Container(
             padding: const EdgeInsets.all(12),
-            color: const Color(0xFFFBF8E6), // Boja termalnog papira
+            color: const Color(0xFFFBF8E6),
             child: Text(
               termoTekst,
               style: const TextStyle(
@@ -141,10 +137,13 @@ class _RacuniScreenState extends State<RacuniScreen> {
         itemBuilder: (context, index) {
           final r = _racuni[index];
           return ListTile(
-            title: Text('${r.racunBroj} • ${r.prezimeIme}', style: const pw.TextStyle(fontWeight: pw.FontWeight.bold).copyWith(fontFamily: 'Roboto')),
+            title: Text(
+              '${r.racunBroj} • ${r.prezimeIme}',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
             subtitle: Text('${r.cijenaUkupno.toStringAsFixed(2)} € • ${r.nacinPlacanja}'),
             trailing: Row(
-              mainAxisSize: minAxisSize,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 IconButton(
                   icon: const Icon(Icons.picture_as_pdf, color: Colors.red),
@@ -163,6 +162,4 @@ class _RacuniScreenState extends State<RacuniScreen> {
       ),
     );
   }
-
-  MainAxisSize get minAxisSize => MainAxisSize.min;
 }
