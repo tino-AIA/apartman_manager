@@ -27,6 +27,7 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
   int _nositeljIndex = 0;
 
   final _cijenaController = TextEditingController();
+  bool _spremam = false;
 
   @override
   void initState() {
@@ -45,14 +46,16 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
       if (_nositeljIndex == -1) _nositeljIndex = 0;
       _cijenaController.text = p.cijenaOsobaNoc.toStringAsFixed(2);
     } else {
-      _odabraniApartman = _service.apartmani.first.naziv;
+      _odabraniApartman = _service.apartmani.isNotEmpty
+          ? _service.apartmani.first.naziv
+          : 'Apartman A1';
       _nacinPlacanja = 'Gotovina / Cash';
       _dolazak = DateTime.now();
       _odlazak = DateTime.now().add(const Duration(days: 7));
       _imeControllers.add(TextEditingController());
       _brojeviDokumenata.add('');
       _cijenaController.text =
-          _service.dohvatiCijenuZaDatum(_dolazak).toStringAsFixed(2);
+          _service.dohvatiCijenuZaDatum(_dolazak, apartmanNaziv: _odabraniApartman).toStringAsFixed(2);
     }
   }
 
@@ -72,14 +75,14 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
 
   int get _brojOsoba => _imeControllers.length;
 
-  double get _cijenaPoOsobi => double.tryParse(_cijenaController.text) ?? 0.0;
+  double get _cijenaPoOsobi => double.tryParse(_cijenaController.text.replaceAll(',', '.')) ?? 0.0;
 
   double get _ukupno => _brojNoci * _brojOsoba * _cijenaPoOsobi;
 
   void _preracunajCijenuPremaDatumu() {
     setState(() {
       _cijenaController.text =
-          _service.dohvatiCijenuZaDatum(_dolazak).toStringAsFixed(2);
+          _service.dohvatiCijenuZaDatum(_dolazak, apartmanNaziv: _odabraniApartman).toStringAsFixed(2);
     });
   }
 
@@ -121,43 +124,68 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
     });
   }
 
-  void _spremi() {
-    List<GostStavka> gosti = [];
-    for (int i = 0; i < _imeControllers.length; i++) {
-      String ime = _imeControllers[i].text.trim();
-      if (ime.isEmpty) ime = 'Gost ${i + 1}';
-      gosti.add(GostStavka(
-        prezimeIme: ime,
-        brojDokumenta: _brojeviDokumenata[i],
-        nositeljRacuna: (i == _nositeljIndex),
-      ));
+  Future<void> _spremi() async {
+    if (_spremam) return;
+    setState(() => _spremam = true);
+
+    try {
+      List<GostStavka> gosti = [];
+      for (int i = 0; i < _imeControllers.length; i++) {
+        String ime = _imeControllers[i].text.trim();
+        if (ime.isEmpty) ime = 'Gost ${i + 1}';
+        gosti.add(GostStavka(
+          prezimeIme: ime,
+          brojDokumenta: _brojeviDokumenata[i],
+          nositeljRacuna: (i == _nositeljIndex),
+        ));
+      }
+
+      final nositelj = gosti[_nositeljIndex].prezimeIme;
+
+      // Generiranje broja računa po formatu RBR/GG (npr. 1/26) ako već ne postoji
+      final String dodijeljeniBrojRacuna = (widget.postojeci != null && widget.postojeci!.racunBroj.isNotEmpty)
+          ? widget.postojeci!.racunBroj
+          : _service.generirajSljedeciBrojRacuna(_dolazak);
+
+      final noviBoravak = TuristBoravak(
+        id: widget.postojeci?.id.isNotEmpty == true
+            ? widget.postojeci!.id
+            : 'boravak_${DateTime.now().millisecondsSinceEpoch}',
+        apartmanNaziv: _odabraniApartman,
+        prezimeIme: nositelj,
+        gosti: gosti,
+        datumDolaska: _dolazak,
+        datumOdlaska: _odlazak,
+        brojDana: _brojNoci,
+        brojOsoba: _brojOsoba,
+        cijenaOsobaNoc: _cijenaPoOsobi,
+        cijenaUkupno: _ukupno,
+        nacinPlacanja: _nacinPlacanja,
+        racunBroj: dodijeljeniBrojRacuna,
+        racunIspisan: widget.postojeci?.racunIspisan ?? false,
+      );
+
+      if (widget.postojeci != null) {
+        await _service.azurirajBoravak(widget.postojeci!.id, noviBoravak);
+      } else {
+        await _service.dodajBoravak(noviBoravak);
+      }
+
+      if (mounted) {
+        Navigator.pop(context, true);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Greška pri spremanju boravka: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _spremam = false);
     }
-
-    final nositelj = gosti[_nositeljIndex].prezimeIme;
-
-    final noviBoravak = TuristBoravak(
-      id: widget.postojeci?.id ??
-          DateTime.now().millisecondsSinceEpoch.toString(),
-      apartmanNaziv: _odabraniApartman,
-      prezimeIme: nositelj,
-      gosti: gosti,
-      datumDolaska: _dolazak,
-      datumOdlaska: _odlazak,
-      brojDana: _brojNoci,
-      brojOsoba: _brojOsoba,
-      cijenaOsobaNoc: _cijenaPoOsobi,
-      cijenaUkupno: _ukupno,
-      nacinPlacanja: _nacinPlacanja,
-      racunBroj: widget.postojeci?.racunBroj ?? '',
-    );
-
-    if (widget.postojeci != null) {
-      _service.azurirajBoravak(widget.postojeci!.id, noviBoravak);
-    } else {
-      _service.dodajBoravak(noviBoravak);
-    }
-
-    Navigator.pop(context);
   }
 
   @override
@@ -175,7 +203,9 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
           children: [
             // 1. Odabir apartmana
             DropdownButtonFormField<String>(
-              value: _odabraniApartman,
+              value: _service.apartmani.any((a) => a.naziv == _odabraniApartman)
+                  ? _odabraniApartman
+                  : (_service.apartmani.isNotEmpty ? _service.apartmani.first.naziv : null),
               decoration: const InputDecoration(
                 labelText: 'Odaberi apartman *',
                 border: OutlineInputBorder(),
@@ -185,7 +215,12 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
                 return DropdownMenuItem(value: a.naziv, child: Text(a.naziv));
               }).toList(),
               onChanged: (val) {
-                if (val != null) setState(() => _odabraniApartman = val);
+                if (val != null) {
+                  setState(() {
+                    _odabraniApartman = val;
+                    _preracunajCijenuPremaDatumu();
+                  });
+                }
               },
             ),
             const SizedBox(height: 12),
@@ -271,7 +306,9 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
                   child: Text('Transakcijski račun'),
                 ),
               ],
-              onChanged: (val) => setState(() => _nacinPlacanja = val!),
+              onChanged: (val) {
+                if (val != null) setState(() => _nacinPlacanja = val);
+              },
             ),
             const Divider(height: 32),
 
@@ -412,13 +449,25 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
             const SizedBox(height: 24),
 
             ElevatedButton.icon(
-              onPressed: _spremi,
-              icon: const Icon(Icons.check),
-              label: Text(widget.postojeci == null
-                  ? 'SPREMI I DODAJE NA POPIS'
-                  : 'SPREMI IZMJENE'),
+              onPressed: _spremam ? null : _spremi,
+              icon: _spremam
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                    )
+                  : const Icon(Icons.check),
+              label: Text(
+                _spremam
+                    ? 'SPREMANJE...'
+                    : (widget.postojeci == null
+                        ? 'SPREMI I DODAJ NA POPIS'
+                        : 'SPREMI IZMJENE'),
+              ),
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 14),
+                backgroundColor: const Color(0xFF0D47A1),
+                foregroundColor: Colors.white,
               ),
             ),
           ],
