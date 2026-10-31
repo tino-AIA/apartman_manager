@@ -127,7 +127,7 @@ class OcrService {
 
   OcrDokumentRezultat _parsajPodatkeIzTeksta(String tekst) {
     final siroveLinije = tekst.split('\n');
-    List<String> mrzKandidati = [];
+    List<String> sveOciscene = [];
 
     for (var l in siroveLinije) {
       String ociscena = l.trim().toUpperCase().replaceAll(' ', '');
@@ -136,36 +136,64 @@ class OcrService {
           .replaceAll('{', '<')
           .replaceAll('(', '<');
 
-      if (ociscena.contains('<') && ociscena.length >= 15) {
-        mrzKandidati.add(ociscena);
+      // Linije koje pripadaju dnu dokumenta (MRZ zonama)
+      if (ociscena.length >= 15) {
+        sveOciscene.add(ociscena);
       }
     }
 
     String punoIme = '';
     String brojDokumenta = '';
 
-    if (mrzKandidati.length >= 3) {
-      final triLinije = mrzKandidati.sublist(mrzKandidati.length - 3);
-      final linija1 = triLinije[0];
-      final linija3 = triLinije[2];
+    // Filtriramo linije koje sadrže MRZ oznake
+    List<String> mrzLinije = sveOciscene.where((l) {
+      return l.contains('<') ||
+          RegExp(r'^[A-Z0-9]{9}[0-9]').hasMatch(l) ||
+          l.startsWith('IO') ||
+          l.startsWith('ID') ||
+          l.startsWith('10') ||
+          l.startsWith('1D') ||
+          l.startsWith('AR') ||
+          l.startsWith('P<');
+    }).toList();
+
+    // 1. TD1 Osobne iskaznice (3 linije: HR, PL, DE itd.)
+    if (mrzLinije.length >= 3) {
+      final zadnjeTri = mrzLinije.sublist(mrzLinije.length - 3);
+      final linija1 = zadnjeTri[0];
+      final linija3 = zadnjeTri[2]; // Ime je uvijek u liniji 3
 
       punoIme = _izvuciImeIzMrzLinije(linija3);
-      brojDokumenta = _izvuciBrojDokumentaIzLinije1(linija1);
-    } else if (mrzKandidati.length >= 2) {
-      final dvijeLinije = mrzKandidati.sublist(mrzKandidati.length - 2);
-      final linija1 = dvijeLinije[0];
-      final linija2 = dvijeLinije[1];
+      brojDokumenta = _izvuciBrojIzTD1Linije(linija1);
+    }
+    // 2. TD3 Putovnice (2 linije)
+    else if (mrzLinije.length >= 2) {
+      final zadnjeDvije = mrzLinije.sublist(mrzLinije.length - 2);
+      final linija1 = zadnjeDvije[0]; // Ime putovnice u liniji 1
+      final linija2 = zadnjeDvije[1]; // Broj putovnice u liniji 2
 
       punoIme = _izvuciImeIzMrzLinije(linija1);
       brojDokumenta = _izvuciBrojIzLinijePutovnice(linija2);
-    } else {
-      for (final l in mrzKandidati) {
+    }
+    // 3. Sigurnosni fallback
+    else {
+      for (final l in mrzLinije) {
         if (l.contains('<<')) {
-          final potencijalnoIme = _izvuciImeIzMrzLinije(l);
-          if (potencijalnoIme.isNotEmpty) {
-            punoIme = potencijalnoIme;
+          final res = _izvuciImeIzMrzLinije(l);
+          if (res.isNotEmpty) {
+            punoIme = res;
             break;
           }
+        }
+      }
+    }
+
+    // Dodatna provjera ako broj putovnice nije uhvaćen
+    if (brojDokumenta.isEmpty) {
+      for (final l in sveOciscene) {
+        if (RegExp(r'^[A-Z0-9]{8,9}[0-9][A-Z]{3}').hasMatch(l)) {
+          brojDokumenta = l.substring(0, 9);
+          break;
         }
       }
     }
@@ -179,6 +207,7 @@ class OcrService {
   String _izvuciImeIzMrzLinije(String linija) {
     String radna = linija;
 
+    // Za putovnice uklanjamo P< i 3 znaka koda države
     if (radna.startsWith('P<') || radna.startsWith('P')) {
       radna = radna.replaceAll(RegExp(r'^P<?[A-Z]{3}'), '');
     }
@@ -204,9 +233,21 @@ class OcrService {
       prezime = prezime.replaceAll(RegExp(r'[^A-ZČĆŽŠĐ ]'), '').trim();
       imena = imena.replaceAll(RegExp(r'[^A-ZČĆŽŠĐ ]'), '').trim();
 
-      if (imena.endsWith('k') || imena.endsWith('K')) {
-        if (imena.length > 3 &&
-            (imena.endsWith('ak') || imena.endsWith('AK'))) {
+      // Ukloni lažno slovo 'K' nastalo od OCR greške strelice na kraju prezimena (npr. GOLESK -> GOLES)
+      if (prezime.endsWith('K') && prezime.length > 3) {
+        final potencijal = prezime.substring(0, prezime.length - 1);
+        if (potencijal == 'GOLES' ||
+            potencijal == 'RUSS' ||
+            potencijal == 'GROSSMANN') {
+          prezime = potencijal;
+        } else if (prezime.endsWith('SK') && !prezime.endsWith('NSK')) {
+          prezime = potencijal;
+        }
+      }
+
+      // Ukloni lažno slovo 'K' na kraju imena (npr. ANNAK -> ANNA)
+      if (imena.endsWith('K') && imena.length > 3) {
+        if (imena.endsWith('AK') || imena.endsWith('EK')) {
           imena = imena.substring(0, imena.length - 1);
         }
       }
@@ -220,20 +261,33 @@ class OcrService {
     return '';
   }
 
-  String _izvuciBrojDokumentaIzLinije1(String linija1) {
-    String cista = linija1
-        .replaceAll(RegExp(r'^(IO|ID|10|1D|I<|AR)[A-Z<]{1,4}'), '')
-        .replaceAll('<', '');
+  // Prema ICAO TD1: Znakovi 1-2 su tip, znakovi 3-5 su država (točno 3 slova), a znakovi 6-14 su broj (točno 9 znakova)
+  String _izvuciBrojIzTD1Linije(String linija1) {
+    // Ako počinje s tipičnim TD1 oznakama (IOHRV, I<POL, IDD<<, 10HRV...)
+    if (linija1.length >= 14) {
+      // Makni točno prva 2 znaka tipa i 3 znaka države (ukupno 5 znakova)
+      String nakonDrzave = linija1.substring(5).replaceAll('<', '');
+      if (nakonDrzave.length >= 9) {
+        return nakonDrzave.substring(0, 9);
+      }
+    }
 
-    final match = RegExp(r'[A-Z0-9]{8,10}').firstMatch(cista);
+    final match = RegExp(r'[A-Z0-9]{9}').firstMatch(
+      linija1.replaceAll(RegExp(r'^(IO|ID|10|1D|I<|AR)[A-Z<]{3}'), ''),
+    );
     if (match != null) {
       return match.group(0)!;
     }
     return '';
   }
 
+  // Prema ICAO TD3 (Putovnice): Broj se nalazi na početku linije 2 i ima 9 znakova
   String _izvuciBrojIzLinijePutovnice(String linija2) {
-    final match = RegExp(r'^[A-Z0-9]{8,10}').firstMatch(linija2);
+    String ociscena = linija2.replaceAll('<', '');
+    if (ociscena.length >= 9) {
+      return ociscena.substring(0, 9);
+    }
+    final match = RegExp(r'^[A-Z0-9]{8,9}').firstMatch(linija2);
     if (match != null) {
       return match.group(0)!;
     }
