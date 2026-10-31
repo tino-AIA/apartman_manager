@@ -1,3 +1,4 @@
+// lib/services/ocr_service.dart
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -62,10 +63,18 @@ class OcrService {
       if (odabranaSlika == null) return null;
 
       final inputImage = InputImage.fromFilePath(odabranaSlika.path);
-      final RecognizedText recognizedText =
+      RecognizedText recognizedText =
           await _textRecognizer.processImage(inputImage);
 
-      return _parsajPodatkeIzTeksta(recognizedText.text);
+      var rezultat = _parsajPodatkeIzTeksta(recognizedText.text);
+
+      if (rezultat.punoIme.isEmpty && rezultat.brojDokumenta.isEmpty) {
+        final rotiraniInput90 = InputImage.fromFilePath(odabranaSlika.path);
+        recognizedText = await _textRecognizer.processImage(rotiraniInput90);
+        rezultat = _parsajPodatkeIzTeksta(recognizedText.text);
+      }
+
+      return rezultat;
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -134,9 +143,10 @@ class OcrService {
       ociscena = ociscena
           .replaceAll('«', '<<')
           .replaceAll('{', '<')
-          .replaceAll('(', '<');
+          .replaceAll('(', '<')
+          .replaceAll('K<', '<<')
+          .replaceAll('<K', '<<');
 
-      // Linije koje pripadaju dnu dokumenta (MRZ zonama)
       if (ociscena.length >= 15) {
         sveOciscene.add(ociscena);
       }
@@ -145,7 +155,6 @@ class OcrService {
     String punoIme = '';
     String brojDokumenta = '';
 
-    // Filtriramo linije koje sadrže MRZ oznake
     List<String> mrzLinije = sveOciscene.where((l) {
       return l.contains('<') ||
           RegExp(r'^[A-Z0-9]{9}[0-9]').hasMatch(l) ||
@@ -157,26 +166,21 @@ class OcrService {
           l.startsWith('P<');
     }).toList();
 
-    // 1. TD1 Osobne iskaznice (3 linije: HR, PL, DE itd.)
     if (mrzLinije.length >= 3) {
       final zadnjeTri = mrzLinije.sublist(mrzLinije.length - 3);
       final linija1 = zadnjeTri[0];
-      final linija3 = zadnjeTri[2]; // Ime je uvijek u liniji 3
+      final linija3 = zadnjeTri[2];
 
       punoIme = _izvuciImeIzMrzLinije(linija3);
       brojDokumenta = _izvuciBrojIzTD1Linije(linija1);
-    }
-    // 2. TD3 Putovnice (2 linije)
-    else if (mrzLinije.length >= 2) {
+    } else if (mrzLinije.length >= 2) {
       final zadnjeDvije = mrzLinije.sublist(mrzLinije.length - 2);
-      final linija1 = zadnjeDvije[0]; // Ime putovnice u liniji 1
-      final linija2 = zadnjeDvije[1]; // Broj putovnice u liniji 2
+      final linija1 = zadnjeDvije[0];
+      final linija2 = zadnjeDvije[1];
 
       punoIme = _izvuciImeIzMrzLinije(linija1);
       brojDokumenta = _izvuciBrojIzLinijePutovnice(linija2);
-    }
-    // 3. Sigurnosni fallback
-    else {
+    } else {
       for (final l in mrzLinije) {
         if (l.contains('<<')) {
           final res = _izvuciImeIzMrzLinije(l);
@@ -188,7 +192,6 @@ class OcrService {
       }
     }
 
-    // Dodatna provjera ako broj putovnice nije uhvaćen
     if (brojDokumenta.isEmpty) {
       for (final l in sveOciscene) {
         if (RegExp(r'^[A-Z0-9]{8,9}[0-9][A-Z]{3}').hasMatch(l)) {
@@ -207,7 +210,6 @@ class OcrService {
   String _izvuciImeIzMrzLinije(String linija) {
     String radna = linija;
 
-    // Za putovnice uklanjamo P< i 3 znaka koda države
     if (radna.startsWith('P<') || radna.startsWith('P')) {
       radna = radna.replaceAll(RegExp(r'^P<?[A-Z]{3}'), '');
     }
@@ -233,19 +235,10 @@ class OcrService {
       prezime = prezime.replaceAll(RegExp(r'[^A-ZČĆŽŠĐ ]'), '').trim();
       imena = imena.replaceAll(RegExp(r'[^A-ZČĆŽŠĐ ]'), '').trim();
 
-      // Ukloni lažno slovo 'K' nastalo od OCR greške strelice na kraju prezimena (npr. GOLESK -> GOLES)
       if (prezime.endsWith('K') && prezime.length > 3) {
-        final potencijal = prezime.substring(0, prezime.length - 1);
-        if (potencijal == 'GOLES' ||
-            potencijal == 'RUSS' ||
-            potencijal == 'GROSSMANN') {
-          prezime = potencijal;
-        } else if (prezime.endsWith('SK') && !prezime.endsWith('NSK')) {
-          prezime = potencijal;
-        }
+        prezime = prezime.substring(0, prezime.length - 1);
       }
 
-      // Ukloni lažno slovo 'K' na kraju imena (npr. ANNAK -> ANNA)
       if (imena.endsWith('K') && imena.length > 3) {
         if (imena.endsWith('AK') || imena.endsWith('EK')) {
           imena = imena.substring(0, imena.length - 1);
@@ -261,11 +254,8 @@ class OcrService {
     return '';
   }
 
-  // Prema ICAO TD1: Znakovi 1-2 su tip, znakovi 3-5 su država (točno 3 slova), a znakovi 6-14 su broj (točno 9 znakova)
   String _izvuciBrojIzTD1Linije(String linija1) {
-    // Ako počinje s tipičnim TD1 oznakama (IOHRV, I<POL, IDD<<, 10HRV...)
     if (linija1.length >= 14) {
-      // Makni točno prva 2 znaka tipa i 3 znaka države (ukupno 5 znakova)
       String nakonDrzave = linija1.substring(5).replaceAll('<', '');
       if (nakonDrzave.length >= 9) {
         return nakonDrzave.substring(0, 9);
@@ -281,7 +271,6 @@ class OcrService {
     return '';
   }
 
-  // Prema ICAO TD3 (Putovnice): Broj se nalazi na početku linije 2 i ima 9 znakova
   String _izvuciBrojIzLinijePutovnice(String linija2) {
     String ociscena = linija2.replaceAll('<', '');
     if (ociscena.length >= 9) {
