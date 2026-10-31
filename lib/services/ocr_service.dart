@@ -131,8 +131,12 @@ class OcrService {
 
     for (var l in siroveLinije) {
       String ociscena = l.trim().toUpperCase().replaceAll(' ', '');
+      ociscena = ociscena
+          .replaceAll('«', '<<')
+          .replaceAll('{', '<')
+          .replaceAll('(', '<');
+
       if (ociscena.contains('<') && ociscena.length >= 15) {
-        ociscena = ociscena.replaceAll('«', '<<').replaceAll('{', '<');
         mrzKandidati.add(ociscena);
       }
     }
@@ -158,18 +162,13 @@ class OcrService {
       for (final l in mrzKandidati) {
         if (l.contains('<<')) {
           final potencijalnoIme = _izvuciImeIzMrzLinije(l);
-          if (potencijalnoIme.isNotEmpty &&
-              !potencijalnoIme.toUpperCase().contains('HRV') &&
-              !potencijalnoIme.toUpperCase().contains('POL')) {
+          if (potencijalnoIme.isNotEmpty) {
             punoIme = potencijalnoIme;
             break;
           }
         }
       }
     }
-
-    punoIme = _ocistiIme(punoIme);
-    brojDokumenta = _ocistiBroj(brojDokumenta);
 
     return OcrDokumentRezultat(
       punoIme: punoIme,
@@ -179,21 +178,38 @@ class OcrService {
 
   String _izvuciImeIzMrzLinije(String linija) {
     String radna = linija;
-    radna = radna.replaceAll(RegExp(r'^[A-Z0-9<]{2,5}'), '');
+
+    if (radna.startsWith('P<') || radna.startsWith('P')) {
+      radna = radna.replaceAll(RegExp(r'^P<?[A-Z]{3}'), '');
+    }
 
     if (!radna.contains('<<')) return '';
 
     final dijelovi = radna.split('<<');
     if (dijelovi.length >= 2) {
       String prezime = dijelovi[0].replaceAll('<', ' ').trim();
-      String imena = dijelovi[1]
+
+      String imenaRaw = dijelovi[1];
+      imenaRaw = imenaRaw
+          .replaceAll(RegExp(r'K<+$'), '')
+          .replaceAll(RegExp(r'<+$'), '');
+
+      final subImena = imenaRaw
           .split('<')
-          .where((s) => s.isNotEmpty && s.length > 1)
-          .join(' ')
-          .trim();
+          .where((s) => s.isNotEmpty && s.length >= 2)
+          .toList();
+
+      String imena = subImena.join(' ').trim();
 
       prezime = prezime.replaceAll(RegExp(r'[^A-ZČĆŽŠĐ ]'), '').trim();
       imena = imena.replaceAll(RegExp(r'[^A-ZČĆŽŠĐ ]'), '').trim();
+
+      if (imena.endsWith('k') || imena.endsWith('K')) {
+        if (imena.length > 3 &&
+            (imena.endsWith('ak') || imena.endsWith('AK'))) {
+          imena = imena.substring(0, imena.length - 1);
+        }
+      }
 
       if (prezime.isNotEmpty && imena.isNotEmpty) {
         return '${_formatiraj(prezime)} ${_formatiraj(imena)}';
@@ -205,9 +221,11 @@ class OcrService {
   }
 
   String _izvuciBrojDokumentaIzLinije1(String linija1) {
-    String bezPrefiksa =
-        linija1.replaceAll(RegExp(r'^(IO|ID|I<|AR)[A-Z<]{1,4}'), '');
-    final match = RegExp(r'^[A-Z0-9]{8,10}').firstMatch(bezPrefiksa);
+    String cista = linija1
+        .replaceAll(RegExp(r'^(IO|ID|10|1D|I<|AR)[A-Z<]{1,4}'), '')
+        .replaceAll('<', '');
+
+    final match = RegExp(r'[A-Z0-9]{8,10}').firstMatch(cista);
     if (match != null) {
       return match.group(0)!;
     }
@@ -220,23 +238,6 @@ class OcrService {
       return match.group(0)!;
     }
     return '';
-  }
-
-  String _ocistiIme(String ime) {
-    final zabranjene = ['HRV', 'POL', 'RUS', 'DEU', 'SPECIMEN', 'PASSPORT'];
-    for (final z in zabranjene) {
-      if (ime.toUpperCase() == z || ime.toUpperCase().startsWith('$z ')) {
-        return '';
-      }
-    }
-    return ime;
-  }
-
-  String _ocistiBroj(String broj) {
-    if (broj.length < 5 || broj.contains('SPECIMEN')) {
-      return '';
-    }
-    return broj;
   }
 
   String _formatiraj(String tekst) {
