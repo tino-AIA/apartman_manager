@@ -19,9 +19,9 @@ class GostStavka {
 
   factory GostStavka.fromMap(Map<String, dynamic> map) {
     return GostStavka(
-      prezimeIme: map['prezimeIme']?.toString() ?? '',
-      brojDokumenta: map['brojDokumenta']?.toString() ?? '',
-      nositeljRacuna: map['nositeljRacuna'] == true,
+      prezimeIme: (map['prezimeIme'] ?? map['prezime_ime'])?.toString() ?? '',
+      brojDokumenta: (map['brojDokumenta'] ?? map['broj_dokumenta'])?.toString() ?? '',
+      nositeljRacuna: map['nositeljRacuna'] == true || map['nositelj_racuna'] == true,
     );
   }
 }
@@ -29,7 +29,7 @@ class GostStavka {
 class TuristBoravak {
   final String id;
   final String apartmanNaziv;
-  final String prezimeIme; // Glavni gost / nositelj računa
+  final String prezimeIme;
   final List<GostStavka> gosti;
   final DateTime datumDolaska;
   final DateTime datumOdlaska;
@@ -70,7 +70,9 @@ class TuristBoravak {
       'cijenaOsobaNoc': cijenaOsobaNoc,
       'cijenaUkupno': cijenaUkupno,
       'nacinPlacanja': nacinPlacanja,
+      'nacin_placanja': nacinPlacanja,
       'racunBroj': racunBroj,
+      'racun_broj': racunBroj,
       'racunIspisan': racunIspisan,
     };
   }
@@ -83,56 +85,29 @@ class TuristBoravak {
           .toList();
     }
 
-    final String glavniGost = map['prezimeIme']?.toString() ?? '';
+    final String glavniGost = (map['prezimeIme'] ?? map['prezime_ime'])?.toString() ?? '';
+
+    final dDol = (map['datumDolaska'] ?? map['datum_dolaska'])?.toString();
+    final dOdl = (map['datumOdlaska'] ?? map['datum_odlaska'])?.toString();
+
+    final rBroj = (map['racunBroj'] ?? map['racun_broj'])?.toString() ?? '';
 
     return TuristBoravak(
       id: map['id']?.toString() ?? '',
-      apartmanNaziv: map['apartmanNaziv']?.toString() ?? 'Apartman A1',
+      apartmanNaziv: (map['apartmanNaziv'] ?? map['apartman_naziv'] ?? map['apartman'])?.toString() ?? '',
       prezimeIme: glavniGost,
       gosti: ucitaniGosti.isNotEmpty
           ? ucitaniGosti
           : [GostStavka(prezimeIme: glavniGost, nositeljRacuna: true)],
-      datumDolaska: DateTime.tryParse(map['datumDolaska']?.toString() ?? '') ?? DateTime.now(),
-      datumOdlaska: DateTime.tryParse(map['datumOdlaska']?.toString() ?? '') ?? DateTime.now(),
-      brojDana: int.tryParse(map['brojDana']?.toString() ?? '1') ?? 1,
-      brojOsoba: int.tryParse(map['brojOsoba']?.toString() ?? '1') ?? 1,
-      cijenaOsobaNoc: (map['cijenaOsobaNoc'] as num?)?.toDouble() ?? 0.0,
-      cijenaUkupno: (map['cijenaUkupno'] as num?)?.toDouble() ?? 0.0,
-      nacinPlacanja: map['nacinPlacanja']?.toString() ?? 'Gotovina / Cash',
-      racunBroj: map['racunBroj']?.toString() ?? '1/1/1',
-      racunIspisan: map['racunIspisan'] == true,
-    );
-  }
-
-  TuristBoravak copyWith({
-    String? id,
-    String? apartmanNaziv,
-    String? prezimeIme,
-    List<GostStavka>? gosti,
-    DateTime? datumDolaska,
-    DateTime? datumOdlaska,
-    int? brojDana,
-    int? brojOsoba,
-    double? cijenaOsobaNoc,
-    double? cijenaUkupno,
-    String? nacinPlacanja,
-    String? racunBroj,
-    bool? racunIspisan,
-  }) {
-    return TuristBoravak(
-      id: id ?? this.id,
-      apartmanNaziv: apartmanNaziv ?? this.apartmanNaziv,
-      prezimeIme: prezimeIme ?? this.prezimeIme,
-      gosti: gosti ?? this.gosti,
-      datumDolaska: datumDolaska ?? this.datumDolaska,
-      datumOdlaska: datumOdlaska ?? this.datumOdlaska,
-      brojDana: brojDana ?? this.brojDana,
-      brojOsoba: brojOsoba ?? this.brojOsoba,
-      cijenaOsobaNoc: cijenaOsobaNoc ?? this.cijenaOsobaNoc,
-      cijenaUkupno: cijenaUkupno ?? this.cijenaUkupno,
-      nacinPlacanja: nacinPlacanja ?? this.nacinPlacanja,
-      racunBroj: racunBroj ?? this.racunBroj,
-      racunIspisan: racunIspisan ?? this.racunIspisan,
+      datumDolaska: dDol != null ? (DateTime.tryParse(dDol) ?? DateTime.now()) : DateTime.now(),
+      datumOdlaska: dOdl != null ? (DateTime.tryParse(dOdl) ?? DateTime.now()) : DateTime.now(),
+      brojDana: int.tryParse((map['brojDana'] ?? map['broj_dana'])?.toString() ?? '1') ?? 1,
+      brojOsoba: int.tryParse((map['brojOsoba'] ?? map['broj_osoba'])?.toString() ?? '1') ?? 1,
+      cijenaOsobaNoc: (map['cijenaOsobaNoc'] ?? map['cijena_osoba_noc'] ?? map['cijena_po_noci'] as num?)?.toDouble() ?? 0.0,
+      cijenaUkupno: (map['cijenaUkupno'] ?? map['cijena_ukupno'] ?? map['ukupno'] as num?)?.toDouble() ?? 0.0,
+      nacinPlacanja: (map['nacinPlacanja'] ?? map['nacin_placanja'])?.toString() ?? 'Gotovina / Cash',
+      racunBroj: rBroj,
+      racunIspisan: map['racunIspisan'] == true || map['racun_ispisan'] == true,
     );
   }
 }
