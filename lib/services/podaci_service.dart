@@ -20,7 +20,7 @@ class ApartmanModel {
     return ApartmanModel(
       id: map['id']?.toString() ?? '',
       naziv: map['naziv']?.toString() ?? '',
-      kapacitet: int.tryParse(map['kapacitet']?.toString() ?? '0') ?? 0,
+      kapacitet: int.tryParse((map['max_osoba'] ?? map['kapacitet'])?.toString() ?? '0') ?? 0,
       cjenik: (map['cjenik_sezone'] ?? map['cjenik']) as List<dynamic>? ?? [],
     );
   }
@@ -72,7 +72,6 @@ class PodaciService extends ChangeNotifier {
     }
   }
 
-  /// Generira sljedeći broj računa za zadanu godinu u formatu RBR/GG (npr. 1/26)
   String generirajSljedeciBrojRacuna(DateTime datum) {
     final dvoznamenkastaGodina = (datum.year % 100).toString().padLeft(2, '0');
     final suffix = '/$dvoznamenkastaGodina';
@@ -130,53 +129,34 @@ class PodaciService extends ChangeNotifier {
     return 25.0;
   }
 
-  Future<bool> dodajBoravak(TuristBoravak boravak) async {
-    try {
-      final mapaZaSpremanje = boravak.toMap();
-      mapaZaSpremanje['created_at'] = DateTime.now().toIso8601String();
+  Future<void> dodajBoravak(TuristBoravak boravak) async {
+    final mapaZaSpremanje = boravak.toMap();
+    mapaZaSpremanje['created_at'] = DateTime.now().toIso8601String();
 
-      await _supabase.from('turisti_boravci').upsert(mapaZaSpremanje);
+    // Izravan upis bez sakrivanja greške
+    await _supabase.from('turisti_boravci').upsert(mapaZaSpremanje);
 
-      _boravci.removeWhere((b) => b.id == boravak.id);
-      _boravci.insert(0, boravak);
+    _boravci.removeWhere((b) => b.id == boravak.id);
+    _boravci.insert(0, boravak);
+    notifyListeners();
+  }
+
+  Future<void> azurirajBoravak(String id, TuristBoravak boravak) async {
+    await _supabase
+        .from('turisti_boravci')
+        .update(boravak.toMap())
+        .eq('id', id);
+
+    final index = _boravci.indexWhere((b) => b.id == id);
+    if (index != -1) {
+      _boravci[index] = boravak;
       notifyListeners();
-      return true;
-    } catch (e) {
-      debugPrint('Greška pri dodavanju boravka u Supabase: $e');
-      _boravci.insert(0, boravak);
-      notifyListeners();
-      return false;
     }
   }
 
-  Future<bool> azurirajBoravak(String id, TuristBoravak boravak) async {
-    try {
-      await _supabase
-          .from('turisti_boravci')
-          .update(boravak.toMap())
-          .eq('id', id);
-
-      final index = _boravci.indexWhere((b) => b.id == id);
-      if (index != -1) {
-        _boravci[index] = boravak;
-        notifyListeners();
-      }
-      return true;
-    } catch (e) {
-      debugPrint('Greška pri ažuriranju boravka: $e');
-      return false;
-    }
-  }
-
-  Future<bool> obrisiBoravak(dynamic id) async {
-    try {
-      await _supabase.from('turisti_boravci').delete().eq('id', id.toString());
-      _boravci.removeWhere((b) => b.id.toString() == id.toString());
-      notifyListeners();
-      return true;
-    } catch (e) {
-      debugPrint('Greška pri brisanju boravka: $e');
-      return false;
-    }
+  Future<void> obrisiBoravak(dynamic id) async {
+    await _supabase.from('turisti_boravci').delete().eq('id', id.toString());
+    _boravci.removeWhere((b) => b.id.toString() == id.toString());
+    notifyListeners();
   }
 }
