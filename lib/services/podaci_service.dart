@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../models/turist_model.dart';
 
 class ApartmanModel {
   final String id;
@@ -22,68 +23,12 @@ class ApartmanModel {
       cjenik: map['cjenik'] as List<dynamic>? ?? [],
     );
   }
-}
-
-class BoravakModel {
-  final String id;
-  final String apartman;
-  final DateTime dolazak;
-  final DateTime odlazak;
-  final String nacinPlacanja;
-  final double cijenaPoNoci;
-  final double ukupno;
-  final List> osobe;
-  final int nositeljIndeks;
-
-  BoravakModel({
-    required this.id,
-    required this.apartman,
-    required this.dolazak,
-    required this.odlazak,
-    required this.nacinPlacanja,
-    required this.cijenaPoNoci,
-    required this.ukupno,
-    required this.osobe,
-    required this.nositeljIndeks,
-  });
-
-  factory BoravakModel.fromMap(Map<String, dynamic> map) {
-    List> parsiraneOsobe = [];
-    if (map['osobe'] != null) {
-      final rawList = map['osobe'] as List<dynamic>;
-      for (var item in rawList) {
-        if (item is Map) {
-          parsiraneOsobe.add({
-            'ime': item['ime']?.toString() ?? '',
-            'dokument': item['dokument']?.toString() ?? '',
-          });
-        }
-      }
-    }
-
-    return BoravakModel(
-      id: map['id']?.toString() ?? '',
-      apartman: map['apartman']?.toString() ?? '',
-      dolazak: DateTime.tryParse(map['datum_dolaska']?.toString() ?? '') ?? DateTime.now(),
-      odlazak: DateTime.tryParse(map['datum_odlaska']?.toString() ?? '') ?? DateTime.now(),
-      nacinPlacanja: map['nacin_placanja']?.toString() ?? 'Gotovina / Cash',
-      cijenaPoNoci: (map['cijena_po_noci'] as num?)?.toDouble() ?? 0.0,
-      ukupno: (map['ukupno'] as num?)?.toDouble() ?? 0.0,
-      osobe: parsiraneOsobe,
-      nositeljIndeks: int.tryParse(map['nositelj_indeks']?.toString() ?? '0') ?? 0,
-    );
-  }
 
   Map<String, dynamic> toMap() {
     return {
-      'apartman': apartman,
-      'datum_dolaska': dolazak.toIso8601String().split('T').first,
-      'datum_odlaska': odlazak.toIso8601String().split('T').first,
-      'nacin_placanja': nacinPlacanja,
-      'cijena_po_noci': cijenaPoNoci,
-      'ukupno': ukupno,
-      'osobe': osobe,
-      'nositelj_indeks': nositeljIndeks,
+      'naziv': naziv,
+      'kapacitet': kapacitet,
+      'cjenik': cjenik,
     };
   }
 }
@@ -98,8 +43,8 @@ class PodaciService extends ChangeNotifier {
   List<ApartmanModel> _apartmani = [];
   List<ApartmanModel> get apartmani => _apartmani;
 
-  List<BoravakModel> _boravci = [];
-  List<BoravakModel> get boravci => _boravci;
+  List<TuristBoravak> _boravci = [];
+  List<TuristBoravak> get boravci => _boravci;
 
   bool _ucitavanje = false;
   bool get ucitavanje => _ucitavanje;
@@ -132,7 +77,7 @@ class PodaciService extends ChangeNotifier {
           .order('created_at', ascending: false);
 
       _boravci = (boravciRes as List<dynamic>)
-          .map((e) => BoravakModel.fromMap(Map<String, dynamic>.from(e as Map)))
+          .map((e) => TuristBoravak.fromMap(Map<String, dynamic>.from(e as Map)))
           .toList();
     } catch (e) {
       debugPrint('Greška pri učitavanju iz Supabasea: $e');
@@ -181,7 +126,7 @@ class PodaciService extends ChangeNotifier {
     return 25.0;
   }
 
-  Future<bool> dodajBoravak(BoravakModel boravak) async {
+  Future<bool> dodajBoravak(TuristBoravak boravak) async {
     try {
       final mapaZaSpremanje = boravak.toMap();
       mapaZaSpremanje['created_at'] = DateTime.now().toIso8601String();
@@ -192,18 +137,18 @@ class PodaciService extends ChangeNotifier {
           .select()
           .single();
 
-      _boravci.insert(0, BoravakModel.fromMap(Map<String, dynamic>.from(res)));
+      _boravci.insert(0, TuristBoravak.fromMap(Map<String, dynamic>.from(res)));
       notifyListeners();
       return true;
     } catch (e) {
-      debugPrint('Greška pri dodavanju boravka: $e');
+      debugPrint('Greška pri dodavanju boravka u Supabase: $e');
       _boravci.insert(0, boravak);
       notifyListeners();
       return false;
     }
   }
 
-  Future<bool> azurirajBoravak(String id, BoravakModel boravak) async {
+  Future<bool> azurirajBoravak(String id, TuristBoravak boravak) async {
     try {
       await _supabase
           .from('turisti_boravci')
@@ -217,12 +162,12 @@ class PodaciService extends ChangeNotifier {
       }
       return true;
     } catch (e) {
-      debugPrint('Greška pri ažuriranju boravka: $e');
+      debugPrint('Greška pri ažuriranju boravka u Supabase: $e');
       return false;
     }
   }
 
-  Future<bool> obrisiBoravak(String id) async {
+  Future<bool> obrisiBoravak(dynamic id) async {
     try {
       await _supabase.from('turisti_boravci').delete().eq('id', id);
       _boravci.removeWhere((b) => b.id == id);
