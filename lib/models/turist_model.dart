@@ -58,22 +58,38 @@ class TuristBoravak {
   }) : gosti = gosti ?? [GostStavka(prezimeIme: prezimeIme, nositeljRacuna: true)];
 
   Map<String, dynamic> toMap() {
+    final dDolaska = datumDolaska.toIso8601String().split('T').first;
+    final dOdlaska = datumOdlaska.toIso8601String().split('T').first;
+    final gostiJson = gosti.map((g) => g.toMap()).toList();
+
     return {
       'id': id,
+      // camelCase nazivi
       'apartmanNaziv': apartmanNaziv,
       'prezimeIme': prezimeIme,
-      'gosti': gosti.map((g) => g.toMap()).toList(),
-      'datumDolaska': datumDolaska.toIso8601String().split('T').first,
-      'datumOdlaska': datumOdlaska.toIso8601String().split('T').first,
+      'gosti': gostiJson,
+      'datumDolaska': dDolaska,
+      'datumOdlaska': dOdlaska,
       'brojDana': brojDana,
       'brojOsoba': brojOsoba,
       'cijenaOsobaNoc': cijenaOsobaNoc,
       'cijenaUkupno': cijenaUkupno,
       'nacinPlacanja': nacinPlacanja,
-      'nacin_placanja': nacinPlacanja,
       'racunBroj': racunBroj,
-      'racun_broj': racunBroj,
       'racunIspisan': racunIspisan,
+
+      // snake_case nazivi (za bazu s NOT NULL ograničenjima)
+      'apartman_naziv': apartmanNaziv,
+      'prezime_ime': prezimeIme,
+      'datum_dolaska': dDolaska,
+      'datum_odlaska': dOdlaska,
+      'broj_dana': brojDana,
+      'broj_osoba': brojOsoba,
+      'cijena_osoba_noc': cijenaOsobaNoc,
+      'cijena_ukupno': cijenaUkupno,
+      'nacin_placanja': nacinPlacanja,
+      'racun_broj': racunBroj,
+      'racun_ispisan': racunIspisan,
     };
   }
 
