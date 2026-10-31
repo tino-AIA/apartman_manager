@@ -1,6 +1,7 @@
 // lib/screens/racuni_screen.dart
 import 'package:flutter/material.dart';
 import 'package:printing/printing.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/turist_model.dart';
 import '../models/postavke_model.dart';
 import '../services/podaci_service.dart';
@@ -18,20 +19,21 @@ class RacuniScreen extends StatefulWidget {
 class _RacuniScreenState extends State<RacuniScreen> {
   final _service = PodaciService();
 
-  final _postavke = PostavkeIznajmljivaca(
-    nazivObjekta: 'Sunset Villa Brela',
-    imePrezime: 'Miha Šošić',
-    oib: '43163137097',
-    mjesto: '21322 Brela',
-    adresa: 'Podrače 1',
-    telefon: '+386 41 527 274',
-    email: 'info@sosic-brela.com',
+  PostavkeIznajmljivaca _postavke = PostavkeIznajmljivaca(
+    nazivObjekta: '',
+    imePrezime: '',
+    oib: '',
+    mjesto: '',
+    adresa: '',
+    telefon: '',
+    email: '',
   );
 
   @override
   void initState() {
     super.initState();
     _service.addListener(_osvjezi);
+    _ucitajPostavke();
   }
 
   @override
@@ -42,6 +44,34 @@ class _RacuniScreenState extends State<RacuniScreen> {
 
   void _osvjezi() => setState(() {});
 
+  Future<void> _ucitajPostavke() async {
+    try {
+      final res = await Supabase.instance.client
+          .from('postavke_vlasnik')
+          .select()
+          .limit(1)
+          .maybeSingle();
+
+      if (res != null && mounted) {
+        setState(() {
+          _postavke = PostavkeIznajmljivaca(
+            nazivObjekta: res['naziv_objekta']?.toString() ?? '',
+            imePrezime: res['ime_prezime']?.toString() ?? '',
+            oib: res['oib']?.toString() ?? '',
+            mjesto: res['mjesto']?.toString() ?? '',
+            adresa: res['adresa']?.toString() ?? '',
+            telefon: res['telefon']?.toString() ?? '',
+            email: res['email']?.toString() ?? '',
+            pdvNapomena: res['pdv_napomena']?.toString() ??
+                'Obveznik nije u sustavu PDV-a, sukladno odredbama čl. 90. st. 2. Zakona o PDV-u. PDV nije obračunat.',
+          );
+        });
+      }
+    } catch (e) {
+      debugPrint('Greška pri dohvaćanju postavki za račune: $e');
+    }
+  }
+
   void _potvrdiBrisanje(BuildContext context, TuristBoravak b) {
     showDialog(
       context: context,
@@ -49,7 +79,7 @@ class _RacuniScreenState extends State<RacuniScreen> {
         title: const Text('Potvrda brisanja računa'),
         content: Text(
           'Sigurno želite obrisati račun ${b.racunBroj} (${b.prezimeIme})?\n\n'
-          'Svi sljedeći računi i stavke u Knjizi prometa automatski će se renumerirati (npr. račun 4 postaje 3).',
+          'Svi sljedeći računi i stavke u Knjizi prometa automatski će se uskladiti.',
         ),
         actions: [
           TextButton(
@@ -62,7 +92,7 @@ class _RacuniScreenState extends State<RacuniScreen> {
               _service.obrisiBoravak(b.id);
               Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Račun ${b.racunBroj} obrisan. Redoslijed je usklađen.')),
+                SnackBar(content: Text('Račun ${b.racunBroj} obrisan.')),
               );
             },
             child: const Text('Obriši', style: TextStyle(color: Colors.white)),
@@ -152,11 +182,14 @@ class _RacuniScreenState extends State<RacuniScreen> {
               separatorBuilder: (_, __) => const Divider(height: 1),
               itemBuilder: (context, index) {
                 final r = racuni[index];
+                final rBrojPrikaz = r.racunBroj.isNotEmpty ? r.racunBroj : '${index + 1}/26';
+                final oznakaBroja = rBrojPrikaz.split('/').first;
+
                 return ListTile(
                   leading: CircleAvatar(
                     backgroundColor: const Color(0xFF0D47A1),
                     child: Text(
-                      r.racunBroj.split('/').first,
+                      oznakaBroja,
                       style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
@@ -165,7 +198,7 @@ class _RacuniScreenState extends State<RacuniScreen> {
                     ),
                   ),
                   title: Text(
-                    '${r.racunBroj} • ${r.prezimeIme}',
+                    '$rBrojPrikaz • ${r.prezimeIme}',
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                   subtitle: Text(
