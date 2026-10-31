@@ -1,4 +1,5 @@
 // lib/services/ocr_service.dart
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -62,23 +63,49 @@ class OcrService {
 
       if (odabranaSlika == null) return null;
 
-      final inputImage = InputImage.fromFilePath(odabranaSlika.path);
-      RecognizedText recognizedText =
-          await _textRecognizer.processImage(inputImage);
+      final datoteka = File(odabranaSlika.path);
 
+      // Pokušaj 1: Normalna orijentacija
+      var inputImage = InputImage.fromFile(datoteka);
+      var recognizedText = await _textRecognizer.processImage(inputImage);
       var rezultat = _parsajPodatkeIzTeksta(recognizedText.text);
 
-      if (rezultat.punoIme.isEmpty && rezultat.brojDokumenta.isEmpty) {
-        final rotiraniInput90 = InputImage.fromFilePath(odabranaSlika.path);
-        recognizedText = await _textRecognizer.processImage(rotiraniInput90);
-        rezultat = _parsajPodatkeIzTeksta(recognizedText.text);
+      // Ako podaci nisu pronađeni, moguće je da je slika vertikalna/zarotirana u galeriji
+      if (rezultat.punoIme.isEmpty || rezultat.brojDokumenta.isEmpty) {
+        final rotacije = [
+          InputImageRotation.rotation90deg,
+          InputImageRotation.rotation180deg,
+          InputImageRotation.rotation270deg,
+        ];
+
+        for (final rot in rotacije) {
+          try {
+            final decodedImage = await decodeImageFromList(await datoteka.readAsBytes());
+            final metadata = InputImageMetadata(
+              size: Size(decodedImage.width.toDouble(), decodedImage.height.toDouble()),
+              rotation: rot,
+              format: InputImageFormat.nv21,
+              bytesPerRow: decodedImage.width,
+            );
+            final rotiraniInput = InputImage.fromBytes(
+              bytes: await datoteka.readAsBytes(),
+              metadata: metadata,
+            );
+            final rotTekst = await _textRecognizer.processImage(rotiraniInput);
+            final noviRezultat = _parsajPodatkeIzTeksta(rotTekst.text);
+
+            if (noviRezultat.punoIme.isNotEmpty && noviRezultat.brojDokumenta.isNotEmpty) {
+              return noviRezultat;
+            }
+          } catch (_) {}
+        }
       }
 
       return rezultat;
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Greška pri učitavanju iz galerije: $e')),
+          SnackBar(content: Text('Greška pri obradi slike: $e')),
         );
       }
       return null;
@@ -90,8 +117,7 @@ class OcrService {
     if (!status.isGranted) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('Potrebna je dozvola za kameru za skeniranje.')),
+          const SnackBar(content: Text('Potrebna je dozvola za kameru.')),
         );
       }
       return null;
@@ -101,7 +127,7 @@ class OcrService {
     if (cameras.isEmpty) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Kamera nije pronađena na uređaju.')),
+          const SnackBar(content: Text('Kamera nije pronađena.')),
         );
       }
       return null;
@@ -120,9 +146,7 @@ class OcrService {
 
     try {
       final inputImage = InputImage.fromFilePath(slikaPath);
-      final RecognizedText recognizedText =
-          await _textRecognizer.processImage(inputImage);
-
+      final recognizedText = await _textRecognizer.processImage(inputImage);
       return _parsajPodatkeIzTeksta(recognizedText.text);
     } catch (e) {
       if (context.mounted) {
@@ -147,6 +171,16 @@ class OcrService {
           .replaceAll('K<', '<<')
           .replaceAll('<K', '<<');
 
+      // Filtriraj administrativne riječi koje stvaraju šum
+      if (ociscena.contains('WYDAJ') ||
+          ociscena.contains('ORGAN') ||
+          ociscena.contains('PREZYD') ||
+          ociscena.contains('AUTHO') ||
+          ociscena.contains('DATUM') ||
+          ociscena.contains('EXPIR')) {
+        continue;
+      }
+
       if (ociscena.length >= 15) {
         sveOciscene.add(ociscena);
       }
@@ -162,10 +196,12 @@ class OcrService {
           l.startsWith('ID') ||
           l.startsWith('10') ||
           l.startsWith('1D') ||
+          l.startsWith('I<') ||
           l.startsWith('AR') ||
           l.startsWith('P<');
     }).toList();
 
+    // 1. TD1 osobne iskaznice (3 linije)
     if (mrzLinije.length >= 3) {
       final zadnjeTri = mrzLinije.sublist(mrzLinije.length - 3);
       final linija1 = zadnjeTri[0];
@@ -173,14 +209,18 @@ class OcrService {
 
       punoIme = _izvuciImeIzMrzLinije(linija3);
       brojDokumenta = _izvuciBrojIzTD1Linije(linija1);
-    } else if (mrzLinije.length >= 2) {
+    }
+    // 2. TD3 putovnice (2 linije)
+    else if (mrzLinije.length >= 2) {
       final zadnjeDvije = mrzLinije.sublist(mrzLinije.length - 2);
       final linija1 = zadnjeDvije[0];
       final linija2 = zadnjeDvije[1];
 
       punoIme = _izvuciImeIzMrzLinije(linija1);
       brojDokumenta = _izvuciBrojIzLinijePutovnice(linija2);
-    } else {
+    }
+    // 3. Rezervno traženje
+    else {
       for (final l in mrzLinije) {
         if (l.contains('<<')) {
           final res = _izvuciImeIzMrzLinije(l);
