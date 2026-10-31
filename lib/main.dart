@@ -17,7 +17,7 @@ void main() async {
     anonKey: SupabaseConfig.anonKey,
   );
 
-  // Učitavanje boravaka i prometa iz Supabase baze pri pokretanju
+  // Učitavanje boravaka, jedinica i prometa iz Supabase baze pri pokretanju
   await PodaciService().ucitajIzSupabase();
 
   runApp(const ApartmanApp());
@@ -52,20 +52,27 @@ class GlavniEkran extends StatefulWidget {
 class _GlavniEkranState extends State<GlavniEkran> {
   int _odabraniIndeks = 0;
 
-  final List<Widget> _ekrani = const [
-    TuristiScreen(),        // Popis turista & OCR skeniranje (povezano s bazom)
-    RacuniScreen(),         // Izdavanje računa & Print (A4 PDF + 58mm)
-    KnjigaPrometaScreen(),  // Knjiga prometa (Obrazac EP) & Excel/PDF izvoz
-    PostavkeScreen(),       // Postavke vlasnika & Sezonski cjenici
-  ];
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _ekrani[_odabraniIndeks],
+      body: IndexedStack(
+        index: _odabraniIndeks,
+        children: const [
+          TuristiScreen(),        // Popis turista & OCR skeniranje
+          RacuniScreen(),         // Izdavanje računa & Print (A4 PDF + 58mm)
+          KnjigaPrometaScreen(),  // Knjiga prometa (Obrazac EP)
+          PostavkeScreen(),       // Postavke vlasnika & Sezonski cjenici
+        ],
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _odabraniIndeks,
-        onDestinationSelected: (idx) => setState(() => _odabraniIndeks = idx),
+        onDestinationSelected: (idx) {
+          setState(() => _odabraniIndeks = idx);
+          // Osvježi podatke kada se korisnik prebaci na Turisti, Računi ili Knjiga EP
+          if (idx == 0 || idx == 1 || idx == 2) {
+            PodaciService().ucitajIzSupabase();
+          }
+        },
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.people_alt_outlined),
