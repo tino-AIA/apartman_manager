@@ -13,7 +13,6 @@ class PostavkeScreen extends StatefulWidget {
 }
 
 class _PostavkeScreenState extends State<PostavkeScreen> {
-  // Fiksni UUID za red postavki vlasnika
   static const String _vlasnikUuid = '00000000-0000-0000-0000-000000000001';
 
   final _nazivObjektaCtrl = TextEditingController();
@@ -83,7 +82,7 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
 
       if (jediniceRes is List && (jediniceRes as List).isNotEmpty) {
         _jedinice = (jediniceRes as List).map((j) {
-          final cjenikRaw = j['cjenik'] as List<dynamic>? ?? [];
+          final cjenikRaw = (j['cjenik_sezone'] ?? j['cjenik']) as List<dynamic>? ?? [];
           List<SezonskiPeriod> sezonskiPeriodi = [];
 
           if (cjenikRaw.isNotEmpty) {
@@ -112,7 +111,7 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
             id: j['id']?.toString() ?? '',
             naziv: j['naziv']?.toString() ?? '',
             maxOsoba: int.tryParse(
-                    (j['kapacitet'] ?? j['max_osoba'])?.toString() ?? '4') ??
+                    (j['max_osoba'] ?? j['kapacitet'])?.toString() ?? '4') ??
                 4,
             cjenikSezone: sezonskiPeriodi,
           );
@@ -206,7 +205,7 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
                     TextField(
                       controller: nazivCtrl,
                       decoration: const InputDecoration(
-                        labelText: 'Naziv jedinice (npr. Sunny, Cozy...)',
+                        labelText: 'Naziv jedinice (npr. De luxe, Sunny...)',
                         border: OutlineInputBorder(),
                       ),
                     ),
@@ -338,7 +337,6 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
                     ));
                   }
 
-                  // Zadrži postojeći UUID ako postoji; za novu jedinicu ostaje prazno pa baza generira UUID
                   final idJedinice = (postojeca != null && postojeca.id.isNotEmpty)
                       ? postojeca.id
                       : '';
@@ -373,7 +371,7 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
     final supabase = Supabase.instance.client;
 
     try {
-      // 1. Spremanje postavki vlasnika s ispravnim UUID ključem
+      // 1. Spremanje postavki vlasnika
       await supabase.from('postavke_vlasnik').upsert({
         'id': _vlasnikUuid,
         'naziv_objekta': _nazivObjektaCtrl.text.trim(),
@@ -386,7 +384,7 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
         'pdv_napomena': _pdvNapomenaCtrl.text.trim(),
       });
 
-      // 2. Brisanje starih jedinica pa ponovni upis
+      // 2. Brisanje starih jedinica i upis novih
       await supabase
           .from('smjestajne_jedinice')
           .delete()
@@ -415,9 +413,9 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
               ? j.cjenikSezone[1].cijenaPoOsobiNoc
               : 0.0,
           'cjenik': cjenikJson,
+          'cjenik_sezone': cjenikJson,
         };
 
-        // Ako jedinica već ima valjani UUID, šalje se, inače baza automatski generira UUID
         if (RegExp(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
             .hasMatch(j.id)) {
           zapis['id'] = j.id;
