@@ -13,7 +13,22 @@ class PdfRacunService {
     required PostavkeIznajmljivaca postavke,
     DateTime? datumIzdavanja,
   }) async {
-    final pdf = pw.Document();
+    // 1. Učitavanje fontova s punom podrškom za hrvatske znakove (č, ć, ž, š, đ)
+    final fontRegular = await PdfGoogleFonts.robotoRegular();
+    final fontBold = await PdfGoogleFonts.robotoBold();
+    final fontItalic = await PdfGoogleFonts.robotoItalic();
+    final fontBoldItalic = await PdfGoogleFonts.robotoBoldItalic();
+
+    // 2. Kreiranje PDF dokumenta s definiranom UTF-8 temom
+    final pdf = pw.Document(
+      theme: pw.ThemeData.withFont(
+        base: fontRegular,
+        bold: fontBold,
+        italic: fontItalic,
+        boldItalic: fontBoldItalic,
+      ),
+    );
+
     final df = DateFormat('dd. MM. yyyy.');
     final tf = DateFormat('HH:mm');
     final sad = datumIzdavanja ?? DateTime.now();
@@ -38,6 +53,7 @@ class PdfRacunService {
                         '${postavke.nazivObjekta} - ${postavke.imePrezime}',
                         style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
                       ),
+                      pw.SizedBox(height: 2),
                       pw.Text('OIB: ${postavke.oib}', style: const pw.TextStyle(fontSize: 11)),
                       pw.Text('${postavke.adresa}, ${postavke.mjesto}, Croatia', style: const pw.TextStyle(fontSize: 11)),
                       pw.Text('${postavke.telefon} - ${postavke.email}', style: const pw.TextStyle(fontSize: 11)),
@@ -70,7 +86,7 @@ class PdfRacunService {
                 ],
               ),
               pw.SizedBox(height: 8),
-              pw.Text('GOST / GUEST:', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+              pw.Text('GOST / GUEST:', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
               pw.Text(boravak.prezimeIme, style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
               pw.SizedBox(height: 16),
 
@@ -118,10 +134,15 @@ class PdfRacunService {
               pw.SizedBox(height: 15),
 
               // Zakonske napomene
-              pw.Text('Boravišna pristojba uključena u cijenu usluga / Sojourn tax included in the price of the service', 
-                style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey800)),
+              pw.Text(
+                'Boravišna pristojba uključena u cijenu usluga / Sojourn tax included in the price of the service',
+                style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey800),
+              ),
               pw.SizedBox(height: 4),
-              pw.Text(postavke.pdvNapomena, style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+              pw.Text(
+                postavke.pdvNapomena,
+                style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
+              ),
               pw.SizedBox(height: 20),
 
               // Zahvala
@@ -146,14 +167,25 @@ class PdfRacunService {
   static pw.Widget _th(String text, {pw.TextAlign align = pw.TextAlign.left}) {
     return pw.Padding(
       padding: const pw.EdgeInsets.all(6),
-      child: pw.Text(text, textAlign: align, style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+      child: pw.Text(
+        text,
+        textAlign: align,
+        style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
+      ),
     );
   }
 
   static pw.Widget _td(String text, {pw.TextAlign align = pw.TextAlign.left, bool bold = false}) {
     return pw.Padding(
       padding: const pw.EdgeInsets.all(6),
-      child: pw.Text(text, textAlign: align, style: pw.TextStyle(fontSize: 9, fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal)),
+      child: pw.Text(
+        text,
+        textAlign: align,
+        style: pw.TextStyle(
+          fontSize: 9,
+          fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+        ),
+      ),
     );
   }
 }
