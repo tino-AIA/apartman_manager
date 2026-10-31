@@ -1,10 +1,8 @@
-// lib/services/ocr_service.dart
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:camera/camera.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:mrz_parser/mrz_parser.dart';
 
 class OcrDokumentRezultat {
   final String punoIme;
@@ -127,85 +125,118 @@ class OcrService {
     }
   }
 
-  // Glavna ICAO 9303 logika
   OcrDokumentRezultat _parsajPodatkeIzTeksta(String tekst) {
-    // 1. Očisti linije i pripremi kandidate za MRZ zonu
-    final linije = tekst
-        .split('\n')
-        .map((l) => l.trim().toUpperCase().replaceAll(' ', ''))
-        .where((l) => l.length >= 28) // ICAO linije imaju minimalno 30 znakova
-        .toList();
-
-    // Tražimo MRZ blok (TD1: 3 linije duljine oko 30; TD3: 2 linije duljine oko 44)
+    final siroveLinije = tekst.split('\n');
     List<String> mrzKandidati = [];
-    for (final l in linije) {
-      if (l.contains('<<') ||
-          l.startsWith('P<') ||
-          l.startsWith('I<') ||
-          l.startsWith('ID') ||
-          l.startsWith('AR')) {
-        mrzKandidati.add(l);
+
+    for (var l in siroveLinije) {
+      String ociscena = l.trim().toUpperCase().replaceAll(' ', '');
+      if (ociscena.contains('<') && ociscena.length >= 15) {
+        ociscena = ociscena.replaceAll('«', '<<').replaceAll('{', '<');
+        mrzKandidati.add(ociscena);
       }
     }
 
-    // 2. Pokušaj službenog ICAO parsiranja putem mrz_parser paketa
-    try {
-      // Ako imamo 3 linije (TD1 - osobne iskaznice)
-      if (mrzKandidati.length >= 3) {
-        final triLinije = mrzKandidati.sublist(mrzKandidati.length - 3);
-        // Osiguraj fiksnu ICAO duljinu od 30 znakova po liniji
-        final normalizirane = triLinije.map((l) => l.padRight(30, '<').substring(0, 30)).toList();
-        final rezultat = MRZParser.parse(normalizirane);
-        return OcrDokumentRezultat(
-          punoIme: '${_formatiraj(rezultat.surnames)} ${_formatiraj(rezultat.givenNames)}'.trim(),
-          brojDokumenta: rezultat.documentNumber,
-        );
-      }
-
-      // Ako imamo 2 linije (TD3 - putovnice ili TD2)
-      if (mrzKandidati.length >= 2) {
-        final dvijeLinije = mrzKandidati.sublist(mrzKandidati.length - 2);
-        final sirina = dvijeLinije.first.length > 38 ? 44 : 36;
-        final normalizirane = dvijeLinije.map((l) => l.padRight(sirina, '<').substring(0, sirina)).toList();
-        final rezultat = MRZParser.parse(normalizirane);
-        return OcrDokumentRezultat(
-          punoIme: '${_formatiraj(rezultat.surnames)} ${_formatiraj(rezultat.givenNames)}'.trim(),
-          brojDokumenta: rezultat.documentNumber,
-        );
-      }
-    } catch (_) {
-      // Ako kontrolna suma nije prošla zbog zamućenja jednog slova, idemo na robustan fallback
-    }
-
-    // 3. Robustan fallback ako parser odbaci kontrolnu sumu
-    String ime = '';
+    String punoIme = '';
     String brojDokumenta = '';
 
-    for (final l in mrzKandidati) {
-      if (l.contains('<<') && !l.startsWith('ID') && !l.startsWith('AR') && !l.startsWith('I<')) {
-        String clean = l.startsWith('P<') ? l.replaceAll(RegExp(r'^P<[A-Z]{3}'), '') : l;
-        final parts = clean.split('<<');
-        if (parts.length >= 2) {
-          final prezime = parts[0].replaceAll(RegExp(r'[^A-Z]'), ' ').trim();
-          final imena = parts[1].split('<').where((s) => s.isNotEmpty).join(' ');
-          ime = '${_formatiraj(prezime)} ${_formatiraj(imena)}';
-          break;
+    if (mrzKandidati.length >= 3) {
+      final triLinije = mrzKandidati.sublist(mrzKandidati.length - 3);
+      final linija1 = triLinije[0];
+      final linija3 = triLinije[2];
+
+      punoIme = _izvuciImeIzMrzLinije(linija3);
+      brojDokumenta = _izvuciBrojDokumentaIzLinije1(linija1);
+    } else if (mrzKandidati.length >= 2) {
+      final dvijeLinije = mrzKandidati.sublist(mrzKandidati.length - 2);
+      final linija1 = dvijeLinije[0];
+      final linija2 = dvijeLinije[1];
+
+      punoIme = _izvuciImeIzMrzLinije(linija1);
+      brojDokumenta = _izvuciBrojIzLinijePutovnice(linija2);
+    } else {
+      for (final l in mrzKandidati) {
+        if (l.contains('<<')) {
+          final potencijalnoIme = _izvuciImeIzMrzLinije(l);
+          if (potencijalnoIme.isNotEmpty &&
+              !potencijalnoIme.toUpperCase().contains('HRV') &&
+              !potencijalnoIme.toUpperCase().contains('POL')) {
+            punoIme = potencijalnoIme;
+            break;
+          }
         }
       }
     }
 
-    for (final l in mrzKandidati) {
-      final docMatch = RegExp(r'[A-Z0-9]{8,10}').firstMatch(l.replaceAll(RegExp(r'^(ID|AR|IO|P<)[A-Z<]{1,4}'), ''));
-      if (docMatch != null && !docMatch.group(0)!.contains('SPECIMEN')) {
-        brojDokumenta = docMatch.group(0)!;
-        break;
-      }
-    }
+    punoIme = _ocistiIme(punoIme);
+    brojDokumenta = _ocistiBroj(brojDokumenta);
 
     return OcrDokumentRezultat(
-      punoIme: ime,
+      punoIme: punoIme,
       brojDokumenta: brojDokumenta,
     );
+  }
+
+  String _izvuciImeIzMrzLinije(String linija) {
+    String radna = linija;
+    radna = radna.replaceAll(RegExp(r'^[A-Z0-9<]{2,5}'), '');
+
+    if (!radna.contains('<<')) return '';
+
+    final dijelovi = radna.split('<<');
+    if (dijelovi.length >= 2) {
+      String prezime = dijelovi[0].replaceAll('<', ' ').trim();
+      String imena = dijelovi[1]
+          .split('<')
+          .where((s) => s.isNotEmpty && s.length > 1)
+          .join(' ')
+          .trim();
+
+      prezime = prezime.replaceAll(RegExp(r'[^A-ZČĆŽŠĐ ]'), '').trim();
+      imena = imena.replaceAll(RegExp(r'[^A-ZČĆŽŠĐ ]'), '').trim();
+
+      if (prezime.isNotEmpty && imena.isNotEmpty) {
+        return '${_formatiraj(prezime)} ${_formatiraj(imena)}';
+      } else if (prezime.isNotEmpty) {
+        return _formatiraj(prezime);
+      }
+    }
+    return '';
+  }
+
+  String _izvuciBrojDokumentaIzLinije1(String linija1) {
+    String bezPrefiksa =
+        linija1.replaceAll(RegExp(r'^(IO|ID|I<|AR)[A-Z<]{1,4}'), '');
+    final match = RegExp(r'^[A-Z0-9]{8,10}').firstMatch(bezPrefiksa);
+    if (match != null) {
+      return match.group(0)!;
+    }
+    return '';
+  }
+
+  String _izvuciBrojIzLinijePutovnice(String linija2) {
+    final match = RegExp(r'^[A-Z0-9]{8,10}').firstMatch(linija2);
+    if (match != null) {
+      return match.group(0)!;
+    }
+    return '';
+  }
+
+  String _ocistiIme(String ime) {
+    final zabranjene = ['HRV', 'POL', 'RUS', 'DEU', 'SPECIMEN', 'PASSPORT'];
+    for (final z in zabranjene) {
+      if (ime.toUpperCase() == z || ime.toUpperCase().startsWith('$z ')) {
+        return '';
+      }
+    }
+    return ime;
+  }
+
+  String _ocistiBroj(String broj) {
+    if (broj.length < 5 || broj.contains('SPECIMEN')) {
+      return '';
+    }
+    return broj;
   }
 
   String _formatiraj(String tekst) {
