@@ -21,6 +21,7 @@ dependencies:
   image_picker: ^1.1.2
   google_mlkit_text_recognition: ^0.13.0
   permission_handler: ^11.3.1
+  mrz_parser: ^2.1.0
 
   # Generiranje i dijeljenje PDF računa / Excel izvoza
   pdf: ^3.11.1
