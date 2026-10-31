@@ -13,13 +13,13 @@ class PostavkeScreen extends StatefulWidget {
 }
 
 class _PostavkeScreenState extends State<PostavkeScreen> {
-  final _nazivObjektaCtrl = TextEditingController(text: 'Sunset Villa Brela');
-  final _imePrezimeCtrl = TextEditingController(text: 'Miha Šošić');
-  final _oibCtrl = TextEditingController(text: '43163137097');
-  final _mjestoCtrl = TextEditingController(text: '21322 Brela');
-  final _adresaCtrl = TextEditingController(text: 'Podrače 1');
-  final _telefonCtrl = TextEditingController(text: '+386 41 527 274');
-  final _emailCtrl = TextEditingController(text: 'info@sosic-brela.com');
+  final _nazivObjektaCtrl = TextEditingController();
+  final _imePrezimeCtrl = TextEditingController();
+  final _oibCtrl = TextEditingController();
+  final _mjestoCtrl = TextEditingController();
+  final _adresaCtrl = TextEditingController();
+  final _telefonCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController();
   final _pdvNapomenaCtrl = TextEditingController(
     text:
         'Obveznik nije u sustavu PDV-a, sukladno odredbama čl. 90. st. 2. Zakona o PDV-u. PDV nije obračunat.',
@@ -60,21 +60,17 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
           .maybeSingle();
 
       if (vlasnikRes != null) {
-        _nazivObjektaCtrl.text =
-            vlasnikRes['naziv_objekta']?.toString() ?? _nazivObjektaCtrl.text;
-        _imePrezimeCtrl.text =
-            vlasnikRes['ime_prezime']?.toString() ?? _imePrezimeCtrl.text;
-        _oibCtrl.text = vlasnikRes['oib']?.toString() ?? _oibCtrl.text;
-        _mjestoCtrl.text =
-            vlasnikRes['mjesto']?.toString() ?? _mjestoCtrl.text;
-        _adresaCtrl.text =
-            vlasnikRes['adresa']?.toString() ?? _adresaCtrl.text;
-        _telefonCtrl.text =
-            vlasnikRes['telefon']?.toString() ?? _telefonCtrl.text;
-        _emailCtrl.text =
-            vlasnikRes['email']?.toString() ?? _emailCtrl.text;
-        _pdvNapomenaCtrl.text =
-            vlasnikRes['pdv_napomena']?.toString() ?? _pdvNapomenaCtrl.text;
+        _nazivObjektaCtrl.text = vlasnikRes['naziv_objekta']?.toString() ?? '';
+        _imePrezimeCtrl.text = vlasnikRes['ime_prezime']?.toString() ?? '';
+        _oibCtrl.text = vlasnikRes['oib']?.toString() ?? '';
+        _mjestoCtrl.text = vlasnikRes['mjesto']?.toString() ?? '';
+        _adresaCtrl.text = vlasnikRes['adresa']?.toString() ?? '';
+        _telefonCtrl.text = vlasnikRes['telefon']?.toString() ?? '';
+        _emailCtrl.text = vlasnikRes['email']?.toString() ?? '';
+        if (vlasnikRes['pdv_napomena'] != null &&
+            vlasnikRes['pdv_napomena'].toString().isNotEmpty) {
+          _pdvNapomenaCtrl.text = vlasnikRes['pdv_napomena'].toString();
+        }
       }
 
       final jediniceRes = await supabase
@@ -100,7 +96,7 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
                 zavrsniDan:
                     int.tryParse(p['zavrsniDan']?.toString() ?? '31') ?? 31,
                 cijenaPoOsobiNoc:
-                    (p['cijena'] as num?)?.toDouble() ?? 30.0,
+                    (p['cijena'] as num?)?.toDouble() ?? 0.0,
               );
             }).toList();
           }
@@ -119,14 +115,7 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
           );
         }).toList();
       } else {
-        _jedinice = [
-          SmjestajnaJedinica(
-            id: '',
-            naziv: 'Apartman A1 (Sunset)',
-            maxOsoba: 4,
-            cjenikSezone: _kreirajPodrazumijevaneSezone(),
-          ),
-        ];
+        _jedinice = [];
       }
     } catch (e) {
       debugPrint('Greška pri učitavanju postavki: $e');
@@ -174,7 +163,7 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
         TextEditingController(text: postojeca?.maxOsoba.toString() ?? '4');
 
     List<SezonskiPeriod> radneSezone = [];
-    if (postojeca != null) {
+    if (postojeca != null && postojeca.cjenikSezone.isNotEmpty) {
       for (var s in postojeca.cjenikSezone) {
         radneSezone.add(SezonskiPeriod(
           naziv: s.naziv,
@@ -214,7 +203,7 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
                     TextField(
                       controller: nazivCtrl,
                       decoration: const InputDecoration(
-                        labelText: 'Naziv jedinice (npr. Apartman A2)',
+                        labelText: 'Naziv jedinice (npr. De luxe, Sunny...)',
                         border: OutlineInputBorder(),
                       ),
                     ),
@@ -335,7 +324,7 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
                   for (int i = 0; i < radneSezone.length; i++) {
                     final novaCijena = double.tryParse(
                             cijeneKontroleri[i].text.replaceAll(',', '.')) ??
-                        30.0;
+                        0.0;
                     finalneSezone.add(SezonskiPeriod(
                       naziv: radneSezone[i].naziv,
                       pocetniMjesec: radneSezone[i].pocetniMjesec,
@@ -346,8 +335,12 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
                     ));
                   }
 
+                  final idJedinice = (postojeca != null && postojeca.id.isNotEmpty)
+                      ? postojeca.id
+                      : 'jedinica_${DateTime.now().millisecondsSinceEpoch}';
+
                   final nova = SmjestajnaJedinica(
-                    id: postojeca?.id ?? '',
+                    id: idJedinice,
                     naziv: nazivCtrl.text.trim(),
                     maxOsoba: int.tryParse(maxOsobaCtrl.text) ?? 4,
                     cjenikSezone: finalneSezone,
@@ -376,8 +369,9 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
     final supabase = Supabase.instance.client;
 
     try {
+      // 1. Spremanje postavki vlasnika
       await supabase.from('postavke_vlasnik').upsert({
-        'id': '1',
+        'id': 'glavne_postavke',
         'naziv_objekta': _nazivObjektaCtrl.text.trim(),
         'ime_prezime': _imePrezimeCtrl.text.trim(),
         'oib': _oibCtrl.text.trim(),
@@ -386,12 +380,11 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
         'telefon': _telefonCtrl.text.trim(),
         'email': _emailCtrl.text.trim(),
         'pdv_napomena': _pdvNapomenaCtrl.text.trim(),
+        'updated_at': DateTime.now().toIso8601String(),
       });
 
-      await supabase
-          .from('smjestajne_jedinice')
-          .delete()
-          .neq('id', '00000000-0000-0000-0000-000000000000');
+      // 2. Brisanje starih jedinica i upis trenutne liste
+      await supabase.from('smjestajne_jedinice').delete().neq('id', 'NEMA_OVE_JEDINICE');
 
       for (var j in _jedinice) {
         final cjenikJson = j.cjenikSezone
@@ -406,16 +399,18 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
             .toList();
 
         final zapis = {
+          'id': j.id.isNotEmpty ? j.id : 'jedinica_${DateTime.now().millisecondsSinceEpoch}',
           'naziv': j.naziv,
           'max_osoba': j.maxOsoba,
           'kapacitet': j.maxOsoba,
           'cijena_sezona': j.cjenikSezone.length > 2
               ? j.cjenikSezone[2].cijenaPoOsobiNoc
-              : 45.0,
+              : 0.0,
           'cijena_predsezona': j.cjenikSezone.length > 1
               ? j.cjenikSezone[1].cijenaPoOsobiNoc
-              : 30.0,
+              : 0.0,
           'cjenik': cjenikJson,
+          'created_at': DateTime.now().toIso8601String(),
         };
 
         await supabase.from('smjestajne_jedinice').insert(zapis);
@@ -426,8 +421,7 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text(
-                'Svi podaci i smještajne jedinice uspješno su spremljeni u bazu!'),
+            content: Text('Svi podaci i smještajne jedinice uspješno su spremljeni u bazu!'),
             backgroundColor: Colors.green,
           ),
         );
@@ -438,6 +432,7 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
           SnackBar(
             content: Text('Greška pri spremanju u bazu: $e'),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
           ),
         );
       }
@@ -570,10 +565,14 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
             const SizedBox(height: 10),
             if (_jedinice.isEmpty)
               const Padding(
-                padding: EdgeInsets.symmetric(vertical: 16.0),
-                child: Text(
-                    'Nema dodanih smještajnih jedinica. Kliknite na "Dodaj jedinicu".',
-                    style: TextStyle(color: Colors.grey)),
+                padding: EdgeInsets.symmetric(vertical: 24.0),
+                child: Center(
+                  child: Text(
+                    'Trenutno nema dodanih smještajnih jedinica.\nKliknite na gornji gumb "+ Dodaj jedinicu" za unos.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.grey, fontSize: 14),
+                  ),
+                ),
               )
             else
               ListView.builder(
