@@ -1,3 +1,4 @@
+// lib/services/podaci_service.dart
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/turist_model.dart';
@@ -20,16 +21,8 @@ class ApartmanModel {
       id: map['id']?.toString() ?? '',
       naziv: map['naziv']?.toString() ?? '',
       kapacitet: int.tryParse(map['kapacitet']?.toString() ?? '0') ?? 0,
-      cjenik: map['cjenik'] as List<dynamic>? ?? [],
+      cjenik: (map['cjenik_sezone'] ?? map['cjenik']) as List<dynamic>? ?? [],
     );
-  }
-
-  Map<String, dynamic> toMap() {
-    return {
-      'naziv': naziv,
-      'kapacitet': kapacitet,
-      'cjenik': cjenik,
-    };
   }
 }
 
@@ -63,35 +56,41 @@ class PodaciService extends ChangeNotifier {
           .map((e) => ApartmanModel.fromMap(Map<String, dynamic>.from(e as Map)))
           .toList();
 
-      if (_apartmani.isEmpty) {
-        _apartmani = [
-          ApartmanModel(id: '1', naziv: 'Apartman A1 (4+1)', kapacitet: 5),
-          ApartmanModel(id: '2', naziv: 'Apartman A2', kapacitet: 4),
-          ApartmanModel(id: '3', naziv: 'Studio', kapacitet: 2),
-        ];
-      }
-
       final boravciRes = await _supabase
           .from('turisti_boravci')
           .select()
           .order('created_at', ascending: false);
 
       _boravci = (boravciRes as List<dynamic>)
-          .map((e) => TuristBoravak.fromMap(Map<String, dynamic>.from(e as Map)))
+          .map<TuristBoravak>((e) => TuristBoravak.fromMap(Map<String, dynamic>.from(e as Map)))
           .toList();
     } catch (e) {
       debugPrint('Greška pri učitavanju iz Supabasea: $e');
-      if (_apartmani.isEmpty) {
-        _apartmani = [
-          ApartmanModel(id: '1', naziv: 'Apartman A1 (4+1)', kapacitet: 5),
-          ApartmanModel(id: '2', naziv: 'Apartman A2', kapacitet: 4),
-          ApartmanModel(id: '3', naziv: 'Studio', kapacitet: 2),
-        ];
-      }
     } finally {
       _ucitavanje = false;
       notifyListeners();
     }
+  }
+
+  /// Generira sljedeći broj računa za zadanu godinu u formatu RBR/GG (npr. 1/26)
+  String generirajSljedeciBrojRacuna(DateTime datum) {
+    final dvoznamenkastaGodina = (datum.year % 100).toString().padLeft(2, '0');
+    final suffix = '/$dvoznamenkastaGodina';
+
+    int maxBroj = 0;
+    for (var b in _boravci) {
+      if (b.racunBroj.endsWith(suffix)) {
+        final dijelovi = b.racunBroj.split('/');
+        if (dijelovi.isNotEmpty) {
+          final rbr = int.tryParse(dijelovi[0]);
+          if (rbr != null && rbr > maxBroj) {
+            maxBroj = rbr;
+          }
+        }
+      }
+    }
+
+    return '${maxBroj + 1}/$dvoznamenkastaGodina';
   }
 
   double dohvatiCijenuZaDatum(DateTime datum, {String? apartmanNaziv}) {
@@ -109,12 +108,17 @@ class PodaciService extends ChangeNotifier {
 
     if (odabrani.cjenik.isNotEmpty) {
       for (var p in odabrani.cjenik) {
-        if (p is Map && p['od'] != null && p['do'] != null) {
-          final odD = DateTime.tryParse(p['od'].toString());
-          final doD = DateTime.tryParse(p['do'].toString());
-          if (odD != null && doD != null) {
-            if ((datum.isAfter(odD) || datum.isAtSameMomentAs(odD)) &&
-                (datum.isBefore(doD) || datum.isAtSameMomentAs(doD))) {
+        if (p is Map) {
+          final pocM = int.tryParse(p['pocetniMjesec']?.toString() ?? '');
+          final pocD = int.tryParse(p['pocetniDan']?.toString() ?? '');
+          final zavM = int.tryParse(p['zavrsniMjesec']?.toString() ?? '');
+          final zavD = int.tryParse(p['zavrsniDan']?.toString() ?? '');
+
+          if (pocM != null && pocD != null && zavM != null && zavD != null) {
+            final start = DateTime(datum.year, pocM, pocD);
+            final end = DateTime(datum.year, zavM, zavD);
+            if ((datum.isAfter(start) || datum.isAtSameMomentAs(start)) &&
+                (datum.isBefore(end) || datum.isAtSameMomentAs(end))) {
               final c = (p['cijena'] as num?)?.toDouble();
               if (c != null && c > 0) return c;
             }
@@ -131,13 +135,10 @@ class PodaciService extends ChangeNotifier {
       final mapaZaSpremanje = boravak.toMap();
       mapaZaSpremanje['created_at'] = DateTime.now().toIso8601String();
 
-      final res = await _supabase
-          .from('turisti_boravci')
-          .insert(mapaZaSpremanje)
-          .select()
-          .single();
+      await _supabase.from('turisti_boravci').upsert(mapaZaSpremanje);
 
-      _boravci.insert(0, TuristBoravak.fromMap(Map<String, dynamic>.from(res)));
+      _boravci.removeWhere((b) => b.id == boravak.id);
+      _boravci.insert(0, boravak);
       notifyListeners();
       return true;
     } catch (e) {
@@ -162,15 +163,15 @@ class PodaciService extends ChangeNotifier {
       }
       return true;
     } catch (e) {
-      debugPrint('Greška pri ažuriranju boravka u Supabase: $e');
+      debugPrint('Greška pri ažuriranju boravka: $e');
       return false;
     }
   }
 
   Future<bool> obrisiBoravak(dynamic id) async {
     try {
-      await _supabase.from('turisti_boravci').delete().eq('id', id);
-      _boravci.removeWhere((b) => b.id == id);
+      await _supabase.from('turisti_boravci').delete().eq('id', id.toString());
+      _boravci.removeWhere((b) => b.id.toString() == id.toString());
       notifyListeners();
       return true;
     } catch (e) {
