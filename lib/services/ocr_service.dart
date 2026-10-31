@@ -4,6 +4,7 @@ import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart
 import 'package:permission_handler/permission_handler.dart';
 import 'package:camera/camera.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:mrz_parser/mrz_parser.dart';
 
 class OcrDokumentRezultat {
   final String punoIme;
@@ -20,7 +21,6 @@ class OcrService {
       TextRecognizer(script: TextRecognitionScript.latin);
   final ImagePicker _picker = ImagePicker();
 
-  /// Glavna metoda: otvara modalni meni za odabir kamere ili galerije
   Future<OcrDokumentRezultat?> skenirajDokument(BuildContext context) async {
     final izvor = await showModalBottomSheet<ImageSource>(
       context: context,
@@ -54,7 +54,6 @@ class OcrService {
     }
   }
 
-  // 1. Odabir slike iz galerije uređaja
   Future<OcrDokumentRezultat?> _odaberiIzGalerije(BuildContext context) async {
     try {
       final XFile? odabranaSlika = await _picker.pickImage(
@@ -72,14 +71,13 @@ class OcrService {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Greška pri učitavanju slike iz galerije: $e')),
+          SnackBar(content: Text('Greška pri učitavanju iz galerije: $e')),
         );
       }
       return null;
     }
   }
 
-  // 2. Snimanje kamerom u realnom vremenu
   Future<OcrDokumentRezultat?> _snimiKamerom(BuildContext context) async {
     final status = await Permission.camera.request();
     if (!status.isGranted) {
@@ -129,116 +127,78 @@ class OcrService {
     }
   }
 
-  // ICAO 9303 MRZ parser: Putovnice (TD3) i Osobne iskaznice (TD1)
+  // Glavna ICAO 9303 logika
   OcrDokumentRezultat _parsajPodatkeIzTeksta(String tekst) {
-    final rawLinije = tekst
+    // 1. Očisti linije i pripremi kandidate za MRZ zonu
+    final linije = tekst
         .split('\n')
-        .map((e) => e.trim().toUpperCase())
-        .where((e) => e.isNotEmpty)
+        .map((l) => l.trim().toUpperCase().replaceAll(' ', ''))
+        .where((l) => l.length >= 28) // ICAO linije imaju minimalno 30 znakova
         .toList();
 
+    // Tražimo MRZ blok (TD1: 3 linije duljine oko 30; TD3: 2 linije duljine oko 44)
+    List<String> mrzKandidati = [];
+    for (final l in linije) {
+      if (l.contains('<<') ||
+          l.startsWith('P<') ||
+          l.startsWith('I<') ||
+          l.startsWith('ID') ||
+          l.startsWith('AR')) {
+        mrzKandidati.add(l);
+      }
+    }
+
+    // 2. Pokušaj službenog ICAO parsiranja putem mrz_parser paketa
+    try {
+      // Ako imamo 3 linije (TD1 - osobne iskaznice)
+      if (mrzKandidati.length >= 3) {
+        final triLinije = mrzKandidati.sublist(mrzKandidati.length - 3);
+        // Osiguraj fiksnu ICAO duljinu od 30 znakova po liniji
+        final normalizirane = triLinije.map((l) => l.padRight(30, '<').substring(0, 30)).toList();
+        final rezultat = MRZParser.parse(normalizirane);
+        return OcrDokumentRezultat(
+          punoIme: '${_formatiraj(rezultat.surnames)} ${_formatiraj(rezultat.givenNames)}'.trim(),
+          brojDokumenta: rezultat.documentNumber,
+        );
+      }
+
+      // Ako imamo 2 linije (TD3 - putovnice ili TD2)
+      if (mrzKandidati.length >= 2) {
+        final dvijeLinije = mrzKandidati.sublist(mrzKandidati.length - 2);
+        final sirina = dvijeLinije.first.length > 38 ? 44 : 36;
+        final normalizirane = dvijeLinije.map((l) => l.padRight(sirina, '<').substring(0, sirina)).toList();
+        final rezultat = MRZParser.parse(normalizirane);
+        return OcrDokumentRezultat(
+          punoIme: '${_formatiraj(rezultat.surnames)} ${_formatiraj(rezultat.givenNames)}'.trim(),
+          brojDokumenta: rezultat.documentNumber,
+        );
+      }
+    } catch (_) {
+      // Ako kontrolna suma nije prošla zbog zamućenja jednog slova, idemo na robustan fallback
+    }
+
+    // 3. Robustan fallback ako parser odbaci kontrolnu sumu
     String ime = '';
     String brojDokumenta = '';
 
-    List<String> mrzLinije = [];
-    for (final l in rawLinije) {
-      final cista = l.replaceAll(' ', '');
-      if (cista.contains('<<') ||
-          cista.startsWith('I<') ||
-          cista.startsWith('IO') ||
-          cista.startsWith('ID') ||
-          cista.startsWith('P<') ||
-          cista.startsWith('P')) {
-        mrzLinije.add(cista);
-      }
-    }
-
-    // A) TD3 Format (Putovnice): 1. red počinje sa P< ili P i sadrži PREZIME<<IME
-    for (final l in mrzLinije) {
-      if (l.startsWith('P<') || (l.startsWith('P') && l.contains('<<'))) {
-        final bezPrefiksa = l.replaceAll(RegExp(r'^P<?[A-Z]{3}'), '');
-        final dijelovi = bezPrefiksa.split('<<');
-        if (dijelovi.length >= 2) {
-          final p = _formatirajVelikaPocetna(dijelovi[0].replaceAll('<', ' ').trim());
-          final i = _formatirajVelikaPocetna(dijelovi[1].replaceAll('<', ' ').trim());
-          if (p.isNotEmpty && i.isNotEmpty) {
-            ime = '$p $i';
-            break;
-          }
-        }
-      }
-    }
-
-    // B) TD1 Format (Osobne iskaznice s 3 reda): 3. red sadrži PREZIME<<IME
-    if (ime.isEmpty) {
-      for (final l in mrzLinije) {
-        if (l.contains('<<') && !l.startsWith('P<')) {
-          final dijelovi = l.split('<<');
-          if (dijelovi.length >= 2) {
-            String p = dijelovi[0]
-                .replaceAll(RegExp(r'^[A-Z0-9<]{2,5}'), '')
-                .replaceAll('<', ' ')
-                .trim();
-            String i = dijelovi[1].replaceAll('<', ' ').trim();
-            if (p.isNotEmpty && i.isNotEmpty) {
-              ime = '${_formatirajVelikaPocetna(p)} ${_formatirajVelikaPocetna(i)}';
-              break;
-            }
-          }
-        }
-      }
-    }
-
-    // C) Izdvajanje broja dokumenta iz MRZ-a
-    for (final l in mrzLinije) {
-      // Putovnica: 2. red počinje brojem dokumenta (8-10 alfanumeričkih znakova)
-      if (RegExp(r'^[A-Z0-9]{8,10}').hasMatch(l) &&
-          !l.contains('<<') &&
-          !l.startsWith('IO') &&
-          !l.startsWith('ID')) {
-        final match = RegExp(r'^[A-Z0-9]{8,10}').firstMatch(l);
-        if (match != null) {
-          brojDokumenta = match.group(0)!;
-          break;
-        }
-      }
-      // Osobna iskaznica: npr. IOHRV... ili IDHRV...
-      if (l.startsWith('IOHRV') || l.startsWith('IDHRV') || l.startsWith('I<HRV')) {
-        final ostatak = l.substring(5).replaceAll('<', '');
-        if (ostatak.length >= 9) {
-          brojDokumenta = ostatak.substring(0, 9);
+    for (final l in mrzKandidati) {
+      if (l.contains('<<') && !l.startsWith('ID') && !l.startsWith('AR') && !l.startsWith('I<')) {
+        String clean = l.startsWith('P<') ? l.replaceAll(RegExp(r'^P<[A-Z]{3}'), '') : l;
+        final parts = clean.split('<<');
+        if (parts.length >= 2) {
+          final prezime = parts[0].replaceAll(RegExp(r'[^A-Z]'), ' ').trim();
+          final imena = parts[1].split('<').where((s) => s.isNotEmpty).join(' ');
+          ime = '${_formatiraj(prezime)} ${_formatiraj(imena)}';
           break;
         }
       }
     }
 
-    // D) Fallback mehanizam ako MRZ nije bio potpuno vidljiv
-    if (ime.isEmpty) {
-      for (final l in rawLinije) {
-        if (l.contains('ZAGREB') ||
-            l.contains('PREBIVALIŠTE') ||
-            l.contains('POLICIJSKA') ||
-            l.contains('DATUM') ||
-            l.contains('REPUBLIC') ||
-            l.contains('PASSPORT')) {
-          continue;
-        }
-        final rijeci = l.split(RegExp(r'\s+'));
-        if (rijeci.length == 2 &&
-            rijeci.every((r) => RegExp(r'^[A-ZČĆŽŠĐ]{3,}$').hasMatch(r))) {
-          ime = '${_formatirajVelikaPocetna(rijeci[0])} ${_formatirajVelikaPocetna(rijeci[1])}';
-          break;
-        }
-      }
-    }
-
-    if (brojDokumenta.isEmpty) {
-      for (final l in rawLinije) {
-        final match = RegExp(r'\b[A-Z0-9]{8,10}\b').firstMatch(l);
-        if (match != null) {
-          brojDokumenta = match.group(0)!;
-          break;
-        }
+    for (final l in mrzKandidati) {
+      final docMatch = RegExp(r'[A-Z0-9]{8,10}').firstMatch(l.replaceAll(RegExp(r'^(ID|AR|IO|P<)[A-Z<]{1,4}'), ''));
+      if (docMatch != null && !docMatch.group(0)!.contains('SPECIMEN')) {
+        brojDokumenta = docMatch.group(0)!;
+        break;
       }
     }
 
@@ -248,11 +208,12 @@ class OcrService {
     );
   }
 
-  String _formatirajVelikaPocetna(String tekst) {
+  String _formatiraj(String tekst) {
     if (tekst.isEmpty) return '';
     return tekst.split(' ').map((r) {
       if (r.isEmpty) return '';
-      return r[0].toUpperCase() + (r.length > 1 ? r.substring(1).toLowerCase() : '');
+      return r[0].toUpperCase() +
+          (r.length > 1 ? r.substring(1).toLowerCase() : '');
     }).join(' ');
   }
 
@@ -261,7 +222,6 @@ class OcrService {
   }
 }
 
-// Sučelje kamere s maksimalnom rezolucijom i okvirom
 class _KameraSkeniranjeScreen extends StatefulWidget {
   final CameraDescription camera;
   const _KameraSkeniranjeScreen({required this.camera});
@@ -279,7 +239,7 @@ class _KameraSkeniranjeScreenState extends State<_KameraSkeniranjeScreen> {
     super.initState();
     _controller = CameraController(
       widget.camera,
-      ResolutionPreset.max, // Maksimalna oštrina za precizno čitanje MRZ linija
+      ResolutionPreset.max,
       enableAudio: false,
     );
     _initializeControllerFuture = _controller.initialize();
