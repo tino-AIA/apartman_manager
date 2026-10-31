@@ -60,14 +60,21 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
           .maybeSingle();
 
       if (vlasnikRes != null) {
-        _nazivObjektaCtrl.text = vlasnikRes['naziv_objekta']?.toString() ?? _nazivObjektaCtrl.text;
-        _imePrezimeCtrl.text = vlasnikRes['ime_prezime']?.toString() ?? _imePrezimeCtrl.text;
+        _nazivObjektaCtrl.text =
+            vlasnikRes['naziv_objekta']?.toString() ?? _nazivObjektaCtrl.text;
+        _imePrezimeCtrl.text =
+            vlasnikRes['ime_prezime']?.toString() ?? _imePrezimeCtrl.text;
         _oibCtrl.text = vlasnikRes['oib']?.toString() ?? _oibCtrl.text;
-        _mjestoCtrl.text = vlasnikRes['mjesto']?.toString() ?? _mjestoCtrl.text;
-        _adresaCtrl.text = vlasnikRes['adresa']?.toString() ?? _adresaCtrl.text;
-        _telefonCtrl.text = vlasnikRes['telefon']?.toString() ?? _telefonCtrl.text;
-        _emailCtrl.text = vlasnikRes['email']?.toString() ?? _emailCtrl.text;
-        _pdvNapomenaCtrl.text = vlasnikRes['pdv_napomena']?.toString() ?? _pdvNapomenaCtrl.text;
+        _mjestoCtrl.text =
+            vlasnikRes['mjesto']?.toString() ?? _mjestoCtrl.text;
+        _adresaCtrl.text =
+            vlasnikRes['adresa']?.toString() ?? _adresaCtrl.text;
+        _telefonCtrl.text =
+            vlasnikRes['telefon']?.toString() ?? _telefonCtrl.text;
+        _emailCtrl.text =
+            vlasnikRes['email']?.toString() ?? _emailCtrl.text;
+        _pdvNapomenaCtrl.text =
+            vlasnikRes['pdv_napomena']?.toString() ?? _pdvNapomenaCtrl.text;
       }
 
       final jediniceRes = await supabase
@@ -84,11 +91,16 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
             sezonskiPeriodi = cjenikRaw.map((p) {
               return SezonskiPeriod(
                 naziv: p['naziv']?.toString() ?? '',
-                pocetniMjesec: int.tryParse(p['pocetniMjesec']?.toString() ?? '1') ?? 1,
-                pocetniDan: int.tryParse(p['pocetniDan']?.toString() ?? '1') ?? 1,
-                zavrsniMjesec: int.tryParse(p['zavrsniMjesec']?.toString() ?? '12') ?? 12,
-                zavrsniDan: int.tryParse(p['zavrsniDan']?.toString() ?? '31') ?? 31,
-                cijenaPoOsobiNoc: (p['cijena'] as num?)?.toDouble() ?? 30.0,
+                pocetniMjesec:
+                    int.tryParse(p['pocetniMjesec']?.toString() ?? '1') ?? 1,
+                pocetniDan:
+                    int.tryParse(p['pocetniDan']?.toString() ?? '1') ?? 1,
+                zavrsniMjesec:
+                    int.tryParse(p['zavrsniMjesec']?.toString() ?? '12') ?? 12,
+                zavrsniDan:
+                    int.tryParse(p['zavrsniDan']?.toString() ?? '31') ?? 31,
+                cijenaPoOsobiNoc:
+                    (p['cijena'] as num?)?.toDouble() ?? 30.0,
               );
             }).toList();
           }
@@ -100,7 +112,9 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
           return SmjestajnaJedinica(
             id: j['id']?.toString() ?? '',
             naziv: j['naziv']?.toString() ?? '',
-            maxOsoba: int.tryParse((j['kapacitet'] ?? j['max_osoba'])?.toString() ?? '4') ?? 4,
+            maxOsoba: int.tryParse(
+                    (j['kapacitet'] ?? j['max_osoba'])?.toString() ?? '4') ??
+                4,
             cjenikSezone: sezonskiPeriodi,
           );
         }).toList();
@@ -123,16 +137,41 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
 
   static List<SezonskiPeriod> _kreirajPodrazumijevaneSezone() {
     return [
-      SezonskiPeriod(naziv: 'Izvan sezone', pocetniMjesec: 1, pocetniDan: 1, zavrsniMjesec: 4, zavrsniDan: 30, cijenaPoOsobiNoc: 25.0),
-      SezonskiPeriod(naziv: 'Predsezona', pocetniMjesec: 5, pocetniDan: 1, zavrsniMjesec: 6, zavrsniDan: 15, cijenaPoOsobiNoc: 30.0),
-      SezonskiPeriod(naziv: 'Glavna sezona', pocetniMjesec: 6, pocetniDan: 16, zavrsniMjesec: 8, zavrsniDan: 31, cijenaPoOsobiNoc: 45.0),
-      SezonskiPeriod(naziv: 'Postsezona', pocetniMjesec: 9, pocetniDan: 1, zavrsniMjesec: 10, zavrsniDan: 31, cijenaPoOsobiNoc: 30.0),
+      SezonskiPeriod(
+          naziv: 'Izvan sezone',
+          pocetniMjesec: 1,
+          pocetniDan: 1,
+          zavrsniMjesec: 4,
+          zavrsniDan: 30,
+          cijenaPoOsobiNoc: 25.0),
+      SezonskiPeriod(
+          naziv: 'Predsezona',
+          pocetniMjesec: 5,
+          pocetniDan: 1,
+          zavrsniMjesec: 6,
+          zavrsniDan: 15,
+          cijenaPoOsobiNoc: 30.0),
+      SezonskiPeriod(
+          naziv: 'Glavna sezona',
+          pocetniMjesec: 6,
+          pocetniDan: 16,
+          zavrsniMjesec: 8,
+          zavrsniDan: 31,
+          cijenaPoOsobiNoc: 45.0),
+      SezonskiPeriod(
+          naziv: 'Postsezona',
+          pocetniMjesec: 9,
+          pocetniDan: 1,
+          zavrsniMjesec: 10,
+          zavrsniDan: 31,
+          cijenaPoOsobiNoc: 30.0),
     ];
   }
 
   void _otvoriDijalogZaJedinicu({SmjestajnaJedinica? postojeca, int? index}) {
     final nazivCtrl = TextEditingController(text: postojeca?.naziv ?? '');
-    final maxOsobaCtrl = TextEditingController(text: postojeca?.maxOsoba.toString() ?? '4');
+    final maxOsobaCtrl =
+        TextEditingController(text: postojeca?.maxOsoba.toString() ?? '4');
 
     List<SezonskiPeriod> radneSezone = [];
     if (postojeca != null) {
@@ -162,7 +201,9 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
           final godina = DateTime.now().year;
 
           return AlertDialog(
-            title: Text(postojeca == null ? 'Nova smještajna jedinica' : 'Uredi smještajnu jedinicu'),
+            title: Text(postojeca == null
+                ? 'Nova smještajna jedinica'
+                : 'Uredi smještajnu jedinicu'),
             content: SizedBox(
               width: double.maxFinite,
               child: SingleChildScrollView(
@@ -188,13 +229,17 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
                     ),
                     const SizedBox(height: 16),
                     const Text('Sezonski periodi i cijene (€):',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 15)),
                     const SizedBox(height: 8),
                     ...List.generate(radneSezone.length, (i) {
                       final sezona = radneSezone[i];
-                      final dPocetak = DateTime(godina, sezona.pocetniMjesec, sezona.pocetniDan);
-                      final dKraj = DateTime(godina, sezona.zavrsniMjesec, sezona.zavrsniDan);
-                      final rasponTekst = '${df.format(dPocetak)} - ${df.format(dKraj)}';
+                      final dPocetak = DateTime(
+                          godina, sezona.pocetniMjesec, sezona.pocetniDan);
+                      final dKraj = DateTime(
+                          godina, sezona.zavrsniMjesec, sezona.zavrsniDan);
+                      final rasponTekst =
+                          '${df.format(dPocetak)} - ${df.format(dKraj)}';
 
                       return Card(
                         margin: const EdgeInsets.only(bottom: 8),
@@ -205,7 +250,9 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(sezona.naziv,
-                                  style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0D47A1))),
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF0D47A1))),
                               const SizedBox(height: 6),
                               Row(
                                 children: [
@@ -213,24 +260,37 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
                                     flex: 3,
                                     child: OutlinedButton.icon(
                                       style: OutlinedButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 8, vertical: 8),
                                       ),
-                                      icon: const Icon(Icons.date_range, size: 18),
-                                      label: Text(rasponTekst, style: const TextStyle(fontSize: 12)),
+                                      icon: const Icon(Icons.date_range,
+                                          size: 18),
+                                      label: Text(rasponTekst,
+                                          style:
+                                              const TextStyle(fontSize: 12)),
                                       onPressed: () async {
-                                        final odabrani = await showDateRangePicker(
+                                        final odabrani =
+                                            await showDateRangePicker(
                                           context: context,
                                           firstDate: DateTime(godina, 1, 1),
                                           lastDate: DateTime(godina, 12, 31),
-                                          initialDateRange: DateTimeRange(start: dPocetak, end: dKraj),
-                                          helpText: 'Odaberite raspon: ${sezona.naziv}',
+                                          initialDateRange: DateTimeRange(
+                                              start: dPocetak, end: dKraj),
+                                          helpText:
+                                              'Odaberite raspon: ${sezona.naziv}',
                                         );
                                         if (odabrani != null) {
                                           setDialogState(() {
-                                            sezona.pocetniMjesec = odabrani.start.month;
-                                            sezona.pocetniDan = odabrani.start.day;
-                                            sezona.zavrsniMjesec = odabrani.end.month;
-                                            sezona.zavrsniDan = odabrani.end.day;
+                                            radneSezone[i] = SezonskiPeriod(
+                                              naziv: sezona.naziv,
+                                              pocetniMjesec:
+                                                  odabrani.start.month,
+                                              pocetniDan: odabrani.start.day,
+                                              zavrsniMjesec: odabrani.end.month,
+                                              zavrsniDan: odabrani.end.day,
+                                              cijenaPoOsobiNoc:
+                                                  sezona.cijenaPoOsobiNoc,
+                                            );
                                           });
                                         }
                                       },
@@ -241,7 +301,9 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
                                     flex: 2,
                                     child: TextField(
                                       controller: cijeneKontroleri[i],
-                                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                      keyboardType:
+                                          const TextInputType.numberWithOptions(
+                                              decimal: true),
                                       decoration: const InputDecoration(
                                         labelText: 'Cijena/noć',
                                         suffixText: '€',
@@ -262,21 +324,33 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
               ),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Odustani')),
+              TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Odustani')),
               ElevatedButton(
                 onPressed: () {
                   if (nazivCtrl.text.trim().isEmpty) return;
 
+                  List<SezonskiPeriod> finalneSezone = [];
                   for (int i = 0; i < radneSezone.length; i++) {
-                    radneSezone[i].cijenaPoOsobiNoc =
-                        double.tryParse(cijeneKontroleri[i].text.replaceAll(',', '.')) ?? 30.0;
+                    final novaCijena = double.tryParse(
+                            cijeneKontroleri[i].text.replaceAll(',', '.')) ??
+                        30.0;
+                    finalneSezone.add(SezonskiPeriod(
+                      naziv: radneSezone[i].naziv,
+                      pocetniMjesec: radneSezone[i].pocetniMjesec,
+                      pocetniDan: radneSezone[i].pocetniDan,
+                      zavrsniMjesec: radneSezone[i].zavrsniMjesec,
+                      zavrsniDan: radneSezone[i].zavrsniDan,
+                      cijenaPoOsobiNoc: novaCijena,
+                    ));
                   }
 
                   final nova = SmjestajnaJedinica(
                     id: postojeca?.id ?? '',
                     naziv: nazivCtrl.text.trim(),
                     maxOsoba: int.tryParse(maxOsobaCtrl.text) ?? 4,
-                    cjenikSezone: radneSezone,
+                    cjenikSezone: finalneSezone,
                   );
 
                   setState(() {
@@ -314,24 +388,33 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
         'pdv_napomena': _pdvNapomenaCtrl.text.trim(),
       });
 
-      await supabase.from('smjestajne_jedinice').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase
+          .from('smjestajne_jedinice')
+          .delete()
+          .neq('id', '00000000-0000-0000-0000-000000000000');
 
       for (var j in _jedinice) {
-        final cjenikJson = j.cjenikSezone.map((p) => {
-          'naziv': p.naziv,
-          'pocetniMjesec': p.pocetniMjesec,
-          'pocetniDan': p.pocetniDan,
-          'zavrsniMjesec': p.zavrsniMjesec,
-          'zavrsniDan': p.zavrsniDan,
-          'cijena': p.cijenaPoOsobiNoc,
-        }).toList();
+        final cjenikJson = j.cjenikSezone
+            .map((p) => {
+                  'naziv': p.naziv,
+                  'pocetniMjesec': p.pocetniMjesec,
+                  'pocetniDan': p.pocetniDan,
+                  'zavrsniMjesec': p.zavrsniMjesec,
+                  'zavrsniDan': p.zavrsniDan,
+                  'cijena': p.cijenaPoOsobiNoc,
+                })
+            .toList();
 
         final zapis = {
           'naziv': j.naziv,
           'max_osoba': j.maxOsoba,
           'kapacitet': j.maxOsoba,
-          'cijena_sezona': j.cjenikSezone.length > 2 ? j.cjenikSezone[2].cijenaPoOsobiNoc : 45.0,
-          'cijena_predsezona': j.cjenikSezone.length > 1 ? j.cjenikSezone[1].cijenaPoOsobiNoc : 30.0,
+          'cijena_sezona': j.cjenikSezone.length > 2
+              ? j.cjenikSezone[2].cijenaPoOsobiNoc
+              : 45.0,
+          'cijena_predsezona': j.cjenikSezone.length > 1
+              ? j.cjenikSezone[1].cijenaPoOsobiNoc
+              : 30.0,
           'cjenik': cjenikJson,
         };
 
@@ -343,7 +426,8 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Svi podaci i smještajne jedinice uspješno su spremljeni u bazu!'),
+            content: Text(
+                'Svi podaci i smještajne jedinice uspješno su spremljeni u bazu!'),
             backgroundColor: Colors.green,
           ),
         );
@@ -394,18 +478,23 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
             const SizedBox(height: 12),
             TextField(
               controller: _nazivObjektaCtrl,
-              decoration: const InputDecoration(labelText: 'Naziv objekta (npr. Sunset Villa)', border: OutlineInputBorder()),
+              decoration: const InputDecoration(
+                  labelText: 'Naziv objekta (npr. Sunset Villa)',
+                  border: OutlineInputBorder()),
             ),
             const SizedBox(height: 10),
             TextField(
               controller: _imePrezimeCtrl,
-              decoration: const InputDecoration(labelText: 'Ime i prezime vlasnika', border: OutlineInputBorder()),
+              decoration: const InputDecoration(
+                  labelText: 'Ime i prezime vlasnika',
+                  border: OutlineInputBorder()),
             ),
             const SizedBox(height: 10),
             TextField(
               controller: _oibCtrl,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'OIB vlasnika', border: OutlineInputBorder()),
+              decoration: const InputDecoration(
+                  labelText: 'OIB vlasnika', border: OutlineInputBorder()),
             ),
             const SizedBox(height: 10),
             Row(
@@ -413,14 +502,18 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
                 Expanded(
                   child: TextField(
                     controller: _mjestoCtrl,
-                    decoration: const InputDecoration(labelText: 'Mjesto i pošt. broj', border: OutlineInputBorder()),
+                    decoration: const InputDecoration(
+                        labelText: 'Mjesto i pošt. broj',
+                        border: OutlineInputBorder()),
                   ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: TextField(
                     controller: _adresaCtrl,
-                    decoration: const InputDecoration(labelText: 'Ulica i kućni broj', border: OutlineInputBorder()),
+                    decoration: const InputDecoration(
+                        labelText: 'Ulica i kućni broj',
+                        border: OutlineInputBorder()),
                   ),
                 ),
               ],
@@ -431,14 +524,18 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
                 Expanded(
                   child: TextField(
                     controller: _telefonCtrl,
-                    decoration: const InputDecoration(labelText: 'Kontakt telefon', border: OutlineInputBorder()),
+                    decoration: const InputDecoration(
+                        labelText: 'Kontakt telefon',
+                        border: OutlineInputBorder()),
                   ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: TextField(
                     controller: _emailCtrl,
-                    decoration: const InputDecoration(labelText: 'Kontakt email', border: OutlineInputBorder()),
+                    decoration: const InputDecoration(
+                        labelText: 'Kontakt email',
+                        border: OutlineInputBorder()),
                   ),
                 ),
               ],
@@ -447,11 +544,11 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
             TextField(
               controller: _pdvNapomenaCtrl,
               maxLines: 2,
-              decoration: const InputDecoration(labelText: 'Napomena o PDV-u na računima', border: OutlineInputBorder()),
+              decoration: const InputDecoration(
+                  labelText: 'Napomena o PDV-u na računima',
+                  border: OutlineInputBorder()),
             ),
-
             const Divider(height: 40, thickness: 1.5),
-
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -474,7 +571,9 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
             if (_jedinice.isEmpty)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 16.0),
-                child: Text('Nema dodanih smještajnih jedinica. Kliknite na "Dodaj jedinicu".', style: TextStyle(color: Colors.grey)),
+                child: Text(
+                    'Nema dodanih smještajnih jedinica. Kliknite na "Dodaj jedinicu".',
+                    style: TextStyle(color: Colors.grey)),
               )
             else
               ListView.builder(
@@ -490,15 +589,18 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
                         backgroundColor: Color(0xFF0D47A1),
                         child: Icon(Icons.meeting_room, color: Colors.white),
                       ),
-                      title: Text(j.naziv, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      title: Text(j.naziv,
+                          style: const TextStyle(fontWeight: FontWeight.bold)),
                       subtitle: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text('Kapacitet: ${j.maxOsoba} osoba'),
                           const SizedBox(height: 4),
                           ...j.cjenikSezone.map((s) {
-                            final d1 = DateTime(godina, s.pocetniMjesec, s.pocetniDan);
-                            final d2 = DateTime(godina, s.zavrsniMjesec, s.zavrsniDan);
+                            final d1 = DateTime(
+                                godina, s.pocetniMjesec, s.pocetniDan);
+                            final d2 = DateTime(
+                                godina, s.zavrsniMjesec, s.zavrsniDan);
                             return Text(
                               '• ${s.naziv} (${df.format(d1)} - ${df.format(d2)}): ${s.cijenaPoOsobiNoc.toStringAsFixed(0)} €',
                               style: const TextStyle(fontSize: 12),
@@ -511,11 +613,13 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
                         children: [
                           IconButton(
                             icon: const Icon(Icons.edit, color: Colors.blue),
-                            onPressed: () => _otvoriDijalogZaJedinicu(postojeca: j, index: idx),
+                            onPressed: () => _otvoriDijalogZaJedinicu(
+                                postojeca: j, index: idx),
                           ),
                           IconButton(
                             icon: const Icon(Icons.delete, color: Colors.red),
-                            onPressed: () => setState(() => _jedinice.removeAt(idx)),
+                            onPressed: () =>
+                                setState(() => _jedinice.removeAt(idx)),
                           ),
                         ],
                       ),
@@ -523,9 +627,7 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
                   );
                 },
               ),
-
             const SizedBox(height: 24),
-
             SizedBox(
               width: double.infinity,
               height: 50,
@@ -539,7 +641,8 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
                     ? const SizedBox(
                         width: 20,
                         height: 20,
-                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                        child: CircularProgressIndicator(
+                            color: Colors.white, strokeWidth: 2),
                       )
                     : const Icon(Icons.save),
                 label: Text(
