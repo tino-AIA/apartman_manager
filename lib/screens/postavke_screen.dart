@@ -369,7 +369,7 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
     final supabase = Supabase.instance.client;
 
     try {
-      // 1. Spremanje postavki vlasnika
+      // 1. Spremanje postavki vlasnika (bez updated_at stupca koji ne postoji u bazi)
       await supabase.from('postavke_vlasnik').upsert({
         'id': 'glavne_postavke',
         'naziv_objekta': _nazivObjektaCtrl.text.trim(),
@@ -380,10 +380,9 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
         'telefon': _telefonCtrl.text.trim(),
         'email': _emailCtrl.text.trim(),
         'pdv_napomena': _pdvNapomenaCtrl.text.trim(),
-        'updated_at': DateTime.now().toIso8601String(),
       });
 
-      // 2. Brisanje starih jedinica i upis trenutne liste
+      // 2. Osvježavanje jedinica u bazi
       await supabase.from('smjestajne_jedinice').delete().neq('id', 'NEMA_OVE_JEDINICE');
 
       for (var j in _jedinice) {
@@ -410,7 +409,6 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
               ? j.cjenikSezone[1].cijenaPoOsobiNoc
               : 0.0,
           'cjenik': cjenikJson,
-          'created_at': DateTime.now().toIso8601String(),
         };
 
         await supabase.from('smjestajne_jedinice').insert(zapis);
