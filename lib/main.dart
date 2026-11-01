@@ -123,10 +123,8 @@ class _GlavniEkranState extends State<GlavniEkran> {
         selectedIndex: _odabraniIndeks,
         onDestinationSelected: (idx) {
           setState(() => _odabraniIndeks = idx);
-          // Osvježi podatke kada se korisnik prebaci na Turisti, Računi ili Knjiga EP
-          if (idx == 0 || idx == 1 || idx == 2) {
-            PodaciService().ucitajIzSupabase();
-          }
+          // Osvježi sve podatke i postavke iz baze čim korisnik klikne na bilo koji tab
+          PodaciService().ucitajIzSupabase();
         },
         destinations: const [
           NavigationDestination(
