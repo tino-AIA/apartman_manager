@@ -4,6 +4,7 @@ import 'package:excel/excel.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 import '../models/turist_model.dart';
 import '../models/postavke_model.dart';
 
@@ -19,21 +20,21 @@ class KprExportService {
     excel.setDefaultSheet('Export');
 
     // Zaglavlje obrasca
-    sheet.appendRow([TextCellValue('1. OPĆI PODACI O POREZNOM OBVEZNIKU'), TextCellValue('Obrazac EP')]);
-    sheet.appendRow([TextCellValue('1.1 IME I PREZIME'), TextCellValue(postavke.imePrezime)]);
-    sheet.appendRow([TextCellValue('1.2 OIB'), TextCellValue(postavke.oib)]);
-    sheet.appendRow([TextCellValue('1.3 MJESTO PREBIVALIŠTA / BORAVIŠTA'), TextCellValue(postavke.mjesto)]);
-    sheet.appendRow([TextCellValue('1.4 ADRESA PREBIVALIŠTA / BORAVIŠTA'), TextCellValue(postavke.adresa)]);
+    sheet.appendRow([const TextCellValue('1. OPĆI PODACI O POREZNOM OBVEZNIKU'), const TextCellValue('Obrazac EP')]);
+    sheet.appendRow([const TextCellValue('1.1 IME I PREZIME'), TextCellValue(postavke.imePrezime)]);
+    sheet.appendRow([const TextCellValue('1.2 OIB'), TextCellValue(postavke.oib)]);
+    sheet.appendRow([const TextCellValue('1.3 MJESTO PREBIVALIŠTA / BORAVIŠTA'), TextCellValue(postavke.mjesto)]);
+    sheet.appendRow([const TextCellValue('1.4 ADRESA PREBIVALIŠTA / BORAVIŠTA'), TextCellValue(postavke.adresa)]);
     sheet.appendRow([TextCellValue('EVIDENCIJA O PROMETU ZA : $godina. godinu')]);
-    sheet.appendRow([TextCellValue('')]);
+    sheet.appendRow([const TextCellValue('')]);
 
     // Zaglavlje tablice
     sheet.appendRow([
-      TextCellValue('Redni broj'),
-      TextCellValue('Broj računa'),
-      TextCellValue('Nadnevak'),
-      TextCellValue('KORISNIK USLUGE (Prezime i ime)'),
-      TextCellValue('IZNOS RAČUNA (EUR)'),
+      const TextCellValue('Redni broj'),
+      const TextCellValue('Broj računa'),
+      const TextCellValue('Nadnevak'),
+      const TextCellValue('KORISNIK USLUGE (Prezime i ime)'),
+      const TextCellValue('IZNOS RAČUNA (EUR)'),
     ]);
 
     double ukupno = 0.0;
@@ -51,27 +52,37 @@ class KprExportService {
       ]);
     }
 
-    sheet.appendRow([TextCellValue('')]);
+    sheet.appendRow([const TextCellValue('')]);
     sheet.appendRow([
-      TextCellValue('TOTAL'),
-      TextCellValue(''),
-      TextCellValue(''),
-      TextCellValue(''),
+      const TextCellValue('TOTAL'),
+      const TextCellValue(''),
+      const TextCellValue(''),
+      const TextCellValue(''),
       DoubleCellValue(ukupno),
     ]);
 
     return excel.save();
   }
 
-  // 2. Generiranje službenog A4 PDF-a s prijenosima stranica
+  // 2. Generiranje službenog A4 PDF-a s prijenosima stranica i UTF-8 fontovima
   static Future<Uint8List> generirajKprPdf({
     required List<TuristBoravak> stavke,
     required PostavkeIznajmljivaca postavke,
     required int godina,
   }) async {
-    final pdf = pw.Document();
+    // Učitavanje fontova s punom podrškom za hrvatske dijakritike
+    final fontRegular = await PdfGoogleFonts.robotoRegular();
+    final fontBold = await PdfGoogleFonts.robotoBold();
+
+    final pdf = pw.Document(
+      theme: pw.ThemeData.withFont(
+        base: fontRegular,
+        bold: fontBold,
+      ),
+    );
+
     final df = DateFormat('dd. MM. yyyy.');
-    const int stavkiPoStranici = 35; // Paginacija kao u vašoj tablici
+    const int stavkiPoStranici = 35;
 
     double donos = 0.0;
     int ukupnoStranica = (stavke.length / stavkiPoStranici).ceil();
@@ -98,21 +109,31 @@ class KprExportService {
             return pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
-                // Zaglavlje na svakoj stranici
+                // Zaglavlje
                 pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
-                    pw.Text('1. OPĆI PODACI O POREZNOM OBVEZNIKU', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
-                    pw.Text('Obrazac EP', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
+                    pw.Text(
+                      '1. OPĆI PODACI O POREZNOM OBVEZNIKU',
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10),
+                    ),
+                    pw.Text(
+                      'Obrazac EP',
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11),
+                    ),
                   ],
                 ),
+                pw.SizedBox(height: 2),
                 pw.Text('1.1 IME I PREZIME: ${postavke.imePrezime}', style: const pw.TextStyle(fontSize: 9)),
                 pw.Text('1.2 OIB: ${postavke.oib}', style: const pw.TextStyle(fontSize: 9)),
                 pw.Text('1.3 MJESTO PREBIVALIŠTA / BORAVIŠTA: ${postavke.mjesto}', style: const pw.TextStyle(fontSize: 9)),
                 pw.Text('1.4 ADRESA PREBIVALIŠTA / BORAVIŠTA: ${postavke.adresa}', style: const pw.TextStyle(fontSize: 9)),
                 pw.SizedBox(height: 6),
                 pw.Center(
-                  child: pw.Text('EVIDENCIJA O PROMETU ZA: $godina. godinu', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
+                  child: pw.Text(
+                    'EVIDENCIJA O PROMETU ZA: $godina. godinu',
+                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11),
+                  ),
                 ),
                 pw.SizedBox(height: 10),
 
@@ -185,14 +206,22 @@ class KprExportService {
     return pw.Container(
       width: width,
       padding: const pw.EdgeInsets.all(4),
-      child: pw.Text(text, textAlign: align, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+      child: pw.Text(
+        text,
+        textAlign: align,
+        style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
+      ),
     );
   }
 
   static pw.Widget _td(String text, {pw.TextAlign align = pw.TextAlign.left, bool bold = false}) {
     return pw.Padding(
       padding: const pw.EdgeInsets.all(4),
-      child: pw.Text(text, textAlign: align, style: pw.TextStyle(fontSize: 8, fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal)),
+      child: pw.Text(
+        text,
+        textAlign: align,
+        style: pw.TextStyle(fontSize: 8, fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal),
+      ),
     );
   }
 }
