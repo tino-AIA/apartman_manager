@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/turist_model.dart';
 import '../models/postavke_model.dart';
 import '../services/podaci_service.dart';
@@ -21,20 +22,21 @@ class KnjigaPrometaScreen extends StatefulWidget {
 class _KnjigaPrometaScreenState extends State<KnjigaPrometaScreen> {
   final _service = PodaciService();
 
-  final _postavke = PostavkeIznajmljivaca(
-    nazivObjekta: 'Sunset Villa Brela',
-    imePrezime: 'Miha Šošić',
-    oib: '43163137097',
-    mjesto: '21322 Brela',
-    adresa: 'Podrače 1',
-    telefon: '+386 41 527 274',
-    email: 'info@sosic-brela.com',
+  PostavkeIznajmljivaca _postavke = PostavkeIznajmljivaca(
+    nazivObjekta: '',
+    imePrezime: '',
+    oib: '',
+    mjesto: '',
+    adresa: '',
+    telefon: '',
+    email: '',
   );
 
   @override
   void initState() {
     super.initState();
     _service.addListener(_osvjezi);
+    _ucitajPostavke();
   }
 
   @override
@@ -45,6 +47,34 @@ class _KnjigaPrometaScreenState extends State<KnjigaPrometaScreen> {
 
   void _osvjezi() => setState(() {});
 
+  Future<void> _ucitajPostavke() async {
+    try {
+      final res = await Supabase.instance.client
+          .from('postavke_vlasnik')
+          .select()
+          .limit(1)
+          .maybeSingle();
+
+      if (res != null && mounted) {
+        setState(() {
+          _postavke = PostavkeIznajmljivaca(
+            nazivObjekta: res['naziv_objekta']?.toString() ?? '',
+            imePrezime: res['ime_prezime']?.toString() ?? '',
+            oib: res['oib']?.toString() ?? '',
+            mjesto: res['mjesto']?.toString() ?? '',
+            adresa: res['adresa']?.toString() ?? '',
+            telefon: res['telefon']?.toString() ?? '',
+            email: res['email']?.toString() ?? '',
+            pdvNapomena: res['pdv_napomena']?.toString() ??
+                'Obveznik nije u sustavu PDV-a, sukladno odredbama čl. 90. st. 2. Zakona o PDV-u. PDV nije obračunat.',
+          );
+        });
+      }
+    } catch (e) {
+      debugPrint('Greška pri dohvaćanju postavki za Knjigu EP: $e');
+    }
+  }
+
   void _potvrdiBrisanje(BuildContext context, TuristBoravak b) {
     showDialog(
       context: context,
@@ -52,7 +82,7 @@ class _KnjigaPrometaScreenState extends State<KnjigaPrometaScreen> {
         title: const Text('Potvrda brisanja iz Knjige EP'),
         content: Text(
           'Sigurno želite obrisati stavku "${b.prezimeIme}" (Račun ${b.racunBroj})?\n\n'
-          'Redni brojevi u Knjizi prometa i svi računi iza njega automatski će se renumerirati (npr. račun 4 postaje 3).',
+          'Redni brojevi u Knjizi prometa i svi računi iza njega automatski će se uskladiti.',
         ),
         actions: [
           TextButton(
@@ -65,7 +95,7 @@ class _KnjigaPrometaScreenState extends State<KnjigaPrometaScreen> {
               _service.obrisiBoravak(b.id);
               Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Stavka obrisana. Knjiga prometa je renumerirana.')),
+                const SnackBar(content: Text('Stavka obrisana. Knjiga prometa je usklađena.')),
               );
             },
             child: const Text('Obriši', style: TextStyle(color: Colors.white)),
@@ -85,7 +115,7 @@ class _KnjigaPrometaScreenState extends State<KnjigaPrometaScreen> {
             build: (format) => KprExportService.generirajKprPdf(
               stavke: _service.boravci,
               postavke: _postavke,
-              godina: 2026,
+              godina: DateTime.now().year,
             ),
           ),
         ),
@@ -94,17 +124,18 @@ class _KnjigaPrometaScreenState extends State<KnjigaPrometaScreen> {
   }
 
   Future<void> _izveziExcel() async {
+    final godina = DateTime.now().year;
     final bytes = KprExportService.generirajKprExcel(
       stavke: _service.boravci,
       postavke: _postavke,
-      godina: 2026,
+      godina: godina,
     );
 
     if (bytes != null) {
       final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/Evidencija_prometa_2026.xlsx');
+      final file = File('${dir.path}/Evidencija_prometa_$godina.xlsx');
       await file.writeAsBytes(bytes);
-      await Share.shareXFiles([XFile(file.path)], text: 'Knjiga prometa 2026 (Obrazac EP)');
+      await Share.shareXFiles([XFile(file.path)], text: 'Knjiga prometa $godina (Obrazac EP)');
     }
   }
 
@@ -113,6 +144,7 @@ class _KnjigaPrometaScreenState extends State<KnjigaPrometaScreen> {
     final df = DateFormat('dd.MM.yyyy.');
     final promet = _service.boravci;
     final ukupniPromet = promet.fold<double>(0.0, (sum, i) => sum + i.cijenaUkupno);
+    final godina = DateTime.now().year;
 
     return Scaffold(
       appBar: AppBar(
@@ -133,7 +165,6 @@ class _KnjigaPrometaScreenState extends State<KnjigaPrometaScreen> {
       ),
       body: Column(
         children: [
-          // Kartica s podacima poreznog obveznika
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(16),
@@ -144,7 +175,8 @@ class _KnjigaPrometaScreenState extends State<KnjigaPrometaScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(_postavke.imePrezime, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    Text(_postavke.imePrezime.isNotEmpty ? _postavke.imePrezime : _postavke.nazivObjekta,
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                     const Text('Obrazac EP', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0D47A1))),
                   ],
                 ),
@@ -153,7 +185,7 @@ class _KnjigaPrometaScreenState extends State<KnjigaPrometaScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('UKUPAN PROMET 2026:', style: TextStyle(fontWeight: FontWeight.bold)),
+                    Text('UKUPAN PROMET $godina:', style: const TextStyle(fontWeight: FontWeight.bold)),
                     Text(
                       '${ukupniPromet.toStringAsFixed(2)} €',
                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF0D47A1)),
@@ -164,8 +196,6 @@ class _KnjigaPrometaScreenState extends State<KnjigaPrometaScreen> {
             ),
           ),
           const Divider(height: 1),
-
-          // Popis stavki prometa
           Expanded(
             child: promet.isEmpty
                 ? const Center(
