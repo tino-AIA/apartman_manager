@@ -192,6 +192,34 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
   }
 
   Future<void> _spremi() async {
+    // Pravilo: Obvezan unos barem 1 osobe s imenom i prezimenom
+    final uneseniGosti = _imeControllers
+        .map((c) => c.text.trim())
+        .where((ime) => ime.isNotEmpty)
+        .toList();
+
+    if (uneseniGosti.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Nije moguće spremiti boravak bez unosa barem jedne osobe (prezime i ime).'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // Provjera nositelja računa
+    final nositeljIme = _imeControllers[_nositeljIndex].text.trim();
+    if (nositeljIme.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Molimo unesite prezime i ime nositelja računa.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     // Provjera preklapanja prije spremanja
     final konflikt = _pronadiPreklapanje(_dolazak, _odlazak, _odabraniApartman);
     if (konflikt != null) {
@@ -220,15 +248,15 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
       List<GostStavka> gosti = [];
       for (int i = 0; i < _imeControllers.length; i++) {
         String ime = _imeControllers[i].text.trim();
-        if (ime.isEmpty) ime = 'Gost ${i + 1}';
+        if (ime.isEmpty) {
+          ime = 'Gost ${i + 1}';
+        }
         gosti.add(GostStavka(
           prezimeIme: ime,
           brojDokumenta: _brojeviDokumenata[i],
           nositeljRacuna: (i == _nositeljIndex),
         ));
       }
-
-      final nositelj = gosti[_nositeljIndex].prezimeIme;
 
       final String dodijeljeniBrojRacuna =
           (widget.postojeci != null && widget.postojeci!.racunBroj.isNotEmpty)
@@ -240,7 +268,7 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
             ? widget.postojeci!.id
             : 'boravak_${DateTime.now().millisecondsSinceEpoch}',
         apartmanNaziv: _odabraniApartman,
-        prezimeIme: nositelj,
+        prezimeIme: nositeljIme,
         gosti: gosti,
         datumDolaska: _dolazak,
         datumOdlaska: _odlazak,
@@ -494,8 +522,8 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
                               controller: controller,
                               decoration: InputDecoration(
                                 labelText: idx == _nositeljIndex
-                                    ? 'Nositelj računa *'
-                                    : 'Osoba ${idx + 1}',
+                                    ? 'Nositelj računa (Prezime i ime) *'
+                                    : 'Osoba ${idx + 1} (Prezime i ime)',
                                 isDense: true,
                               ),
                             ),
