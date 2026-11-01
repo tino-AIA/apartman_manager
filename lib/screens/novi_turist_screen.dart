@@ -50,12 +50,15 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
           ? _service.apartmani.first.naziv
           : 'Apartman A1';
       _nacinPlacanja = 'Gotovina / Cash';
-      _dolazak = DateTime.now();
-      _odlazak = DateTime.now().add(const Duration(days: 7));
+
+      // Automatski postavi datume na prvi sljedeći slobodni period za apartman
+      _postaviPrviSlobodanTermin(_odabraniApartman);
+
       _imeControllers.add(TextEditingController());
       _brojeviDokumenata.add('');
-      _cijenaController.text =
-          _service.dohvatiCijenuZaDatum(_dolazak, apartmanNaziv: _odabraniApartman).toStringAsFixed(2);
+      _cijenaController.text = _service
+          .dohvatiCijenuZaDatum(_dolazak, apartmanNaziv: _odabraniApartman)
+          .toStringAsFixed(2);
     }
   }
 
@@ -68,6 +71,55 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
     super.dispose();
   }
 
+  int get _maxKapacitet {
+    final ap = _service.apartmani.firstWhere(
+      (a) => a.naziv == _odabraniApartman,
+      orElse: () => ApartmanModel(id: '', naziv: '', kapacitet: 10),
+    );
+    return ap.kapacitet > 0 ? ap.kapacitet : 10;
+  }
+
+  /// Pronalazi zadnji dan zauzeća za apartman i postavlja dolazak na taj dan (ili danas ako je slobodan)
+  void _postaviPrviSlobodanTermin(String apartmanNaziv) {
+    final zauzetiBoravci = _service.boravci
+        .where((b) => b.apartmanNaziv == apartmanNaziv && b.id != widget.postojeci?.id)
+        .toList();
+
+    DateTime predlozeniDolazak = DateTime.now();
+
+    if (zauzetiBoravci.isNotEmpty) {
+      // Sortiraj po datumu odlaska uzlazno
+      zauzetiBoravci.sort((a, b) => a.datumOdlaska.compareTo(b.datumOdlaska));
+      final zadnjiOdlazak = zauzetiBoravci.last.datumOdlaska;
+
+      // Ako je zadnji odlazak u budućnosti, sljedeći gost može doći na dan odlaska prethodnog
+      if (zadnjiOdlazak.isAfter(predlozeniDolazak)) {
+        predlozeniDolazak = zadnjiOdlazak;
+      }
+    }
+
+    _dolazak = DateTime(predlozeniDolazak.year, predlozeniDolazak.month, predlozeniDolazak.day);
+    _odlazak = _dolazak.add(const Duration(days: 7));
+  }
+
+  /// Provjera preklapanja: novi boravak se preklapa ako je novi dolazak prije postojećeg odlaska,
+  /// a novi odlazak poslije postojećeg dolaska.
+  TuristBoravak? _pronadiPreklapanje(DateTime start, DateTime end, String apartman) {
+    for (var b in _service.boravci) {
+      if (widget.postojeci != null && b.id == widget.postojeci!.id) continue;
+      if (b.apartmanNaziv != apartman) continue;
+
+      final postojeciStart = DateTime(b.datumDolaska.year, b.datumDolaska.month, b.datumDolaska.day);
+      final postojeciEnd = DateTime(b.datumOdlaska.year, b.datumOdlaska.month, b.datumOdlaska.day);
+
+      // Preklapanje termina
+      if (start.isBefore(postojeciEnd) && end.isAfter(postojeciStart)) {
+        return b;
+      }
+    }
+    return null;
+  }
+
   int get _brojNoci {
     final diff = _odlazak.difference(_dolazak).inDays;
     return diff <= 0 ? 1 : diff;
@@ -75,14 +127,16 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
 
   int get _brojOsoba => _imeControllers.length;
 
-  double get _cijenaPoOsobi => double.tryParse(_cijenaController.text.replaceAll(',', '.')) ?? 0.0;
+  double get _cijenaPoOsobi =>
+      double.tryParse(_cijenaController.text.replaceAll(',', '.')) ?? 0.0;
 
   double get _ukupno => _brojNoci * _brojOsoba * _cijenaPoOsobi;
 
   void _preracunajCijenuPremaDatumu() {
     setState(() {
-      _cijenaController.text =
-          _service.dohvatiCijenuZaDatum(_dolazak, apartmanNaziv: _odabraniApartman).toStringAsFixed(2);
+      _cijenaController.text = _service
+          .dohvatiCijenuZaDatum(_dolazak, apartmanNaziv: _odabraniApartman)
+          .toStringAsFixed(2);
     });
   }
 
@@ -106,6 +160,19 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
   }
 
   void _dodajNovogGosta() {
+    // Pravilo 3: Onemogućavanje unosa većeg broja gostiju od kapaciteta
+    if (_imeControllers.length >= _maxKapacitet) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Maksimalni kapacitet za apartman "$_odabraniApartman" je $_maxKapacitet osoba.',
+          ),
+          backgroundColor: Colors.orange.shade800,
+        ),
+      );
+      return;
+    }
+
     setState(() {
       _imeControllers.add(TextEditingController());
       _brojeviDokumenata.add('');
@@ -125,6 +192,27 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
   }
 
   Future<void> _spremi() async {
+    // Provjera preklapanja prije spremanja
+    final konflikt = _pronadiPreklapanje(_dolazak, _odlazak, _odabraniApartman);
+    if (konflikt != null) {
+      final df = DateFormat('dd.MM.yyyy.');
+      final t1 = df.format(konflikt.datumDolaska);
+      final t2 = df.format(konflikt.datumOdlaska);
+      _prikaziDijalogZauzetosti(konflikt.prezimeIme, t1, t2);
+      return;
+    }
+
+    // Provjera kapaciteta
+    if (_imeControllers.length > _maxKapacitet) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Broj prijavljenih osoba prelazi kapacitet ($_maxKapacitet).'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     if (_spremam) return;
     setState(() => _spremam = true);
 
@@ -142,10 +230,10 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
 
       final nositelj = gosti[_nositeljIndex].prezimeIme;
 
-      // Generiranje broja računa po formatu RBR/GG (npr. 1/26) ako već ne postoji
-      final String dodijeljeniBrojRacuna = (widget.postojeci != null && widget.postojeci!.racunBroj.isNotEmpty)
-          ? widget.postojeci!.racunBroj
-          : _service.generirajSljedeciBrojRacuna(_dolazak);
+      final String dodijeljeniBrojRacuna =
+          (widget.postojeci != null && widget.postojeci!.racunBroj.isNotEmpty)
+              ? widget.postojeci!.racunBroj
+              : _service.generirajSljedeciBrojRacuna(_dolazak);
 
       final noviBoravak = TuristBoravak(
         id: widget.postojeci?.id.isNotEmpty == true
@@ -188,6 +276,28 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
     }
   }
 
+  void _prikaziDijalogZauzetosti(String nositelj, String odDatuma, String doDatuma) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 48),
+        title: const Text('Termin je već zauzet!'),
+        content: Text(
+          'Apartman "$_odabraniApartman" je u odabranom razdoblju već rezerviran.\n\n'
+          'Postojeći boravak: $nositelj\n'
+          'Zauzeti period: $odDatuma - $doDatuma\n\n'
+          'Molimo odaberite slobodne datume ili drugi apartman.',
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('U redu'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final df = DateFormat('dd.MM.yyyy.');
@@ -206,26 +316,33 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
               value: _service.apartmani.any((a) => a.naziv == _odabraniApartman)
                   ? _odabraniApartman
                   : (_service.apartmani.isNotEmpty ? _service.apartmani.first.naziv : null),
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Odaberi apartman *',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.apartment),
+                border: const OutlineInputBorder(),
+                prefixIcon: const Icon(Icons.apartment),
+                helperText: 'Maksimalni kapacitet: $_maxKapacitet osoba',
               ),
               items: _service.apartmani.map((a) {
-                return DropdownMenuItem(value: a.naziv, child: Text(a.naziv));
+                return DropdownMenuItem(
+                  value: a.naziv,
+                  child: Text('${a.naziv} (max ${a.kapacitet} os.)'),
+                );
               }).toList(),
               onChanged: (val) {
                 if (val != null) {
                   setState(() {
                     _odabraniApartman = val;
+                    if (widget.postojeci == null) {
+                      _postaviPrviSlobodanTermin(val);
+                    }
                     _preracunajCijenuPremaDatumu();
                   });
                 }
               },
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
 
-            // 2. Odabir datuma
+            // 2. Odabir datuma (Zabrana preklapanja i odlaska prije dolaska)
             Row(
               children: [
                 Expanded(
@@ -243,13 +360,22 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
                         lastDate: DateTime(2030),
                       );
                       if (picked != null) {
-                        setState(() {
-                          _dolazak = picked;
-                          if (_odlazak.isBefore(_dolazak)) {
-                            _odlazak = _dolazak.add(const Duration(days: 1));
-                          }
-                          _preracunajCijenuPremaDatumu();
-                        });
+                        final noviOdlazak = (_odlazak.isBefore(picked) || _odlazak.isAtSameMomentAs(picked))
+                            ? picked.add(const Duration(days: 1))
+                            : _odlazak;
+
+                        final konflikt = _pronadiPreklapanje(picked, noviOdlazak, _odabraniApartman);
+                        if (konflikt != null) {
+                          final t1 = df.format(konflikt.datumDolaska);
+                          final t2 = df.format(konflikt.datumOdlaska);
+                          _prikaziDijalogZauzetosti(konflikt.prezimeIme, t1, t2);
+                        } else {
+                          setState(() {
+                            _dolazak = picked;
+                            _odlazak = noviOdlazak;
+                            _preracunajCijenuPremaDatumu();
+                          });
+                        }
                       }
                     },
                   ),
@@ -263,13 +389,25 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
                       textAlign: TextAlign.center,
                     ),
                     onPressed: () async {
+                      // Pravilo 2: Odlazak može biti najranije dan poslije dolaska
+                      final minOdlazak = _dolazak.add(const Duration(days: 1));
+
                       final picked = await showDatePicker(
                         context: context,
-                        initialDate: _odlazak,
-                        firstDate: _dolazak.add(const Duration(days: 1)),
+                        initialDate: _odlazak.isAfter(_dolazak) ? _odlazak : minOdlazak,
+                        firstDate: minOdlazak,
                         lastDate: DateTime(2030),
                       );
-                      if (picked != null) setState(() => _odlazak = picked);
+                      if (picked != null) {
+                        final konflikt = _pronadiPreklapanje(_dolazak, picked, _odabraniApartman);
+                        if (konflikt != null) {
+                          final t1 = df.format(konflikt.datumDolaska);
+                          final t2 = df.format(konflikt.datumOdlaska);
+                          _prikaziDijalogZauzetosti(konflikt.prezimeIme, t1, t2);
+                        } else {
+                          setState(() => _odlazak = picked);
+                        }
+                      }
                     },
                   ),
                 ),
@@ -285,26 +423,11 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
                 border: OutlineInputBorder(),
               ),
               items: const [
-                DropdownMenuItem(
-                  value: 'Gotovina / Cash',
-                  child: Text('Gotovina / Cash'),
-                ),
-                DropdownMenuItem(
-                  value: 'Kartica / Card',
-                  child: Text('Kartica / Card'),
-                ),
-                DropdownMenuItem(
-                  value: 'Booking.com',
-                  child: Text('Booking.com'),
-                ),
-                DropdownMenuItem(
-                  value: 'Airbnb',
-                  child: Text('Airbnb'),
-                ),
-                DropdownMenuItem(
-                  value: 'Transakcijski račun',
-                  child: Text('Transakcijski račun'),
-                ),
+                DropdownMenuItem(value: 'Gotovina / Cash', child: Text('Gotovina / Cash')),
+                DropdownMenuItem(value: 'Kartica / Card', child: Text('Kartica / Card')),
+                DropdownMenuItem(value: 'Booking.com', child: Text('Booking.com')),
+                DropdownMenuItem(value: 'Airbnb', child: Text('Airbnb')),
+                DropdownMenuItem(value: 'Transakcijski račun', child: Text('Transakcijski račun')),
               ],
               onChanged: (val) {
                 if (val != null) setState(() => _nacinPlacanja = val);
@@ -312,21 +435,35 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
             ),
             const Divider(height: 32),
 
-            // 3. Popis osoba i nositelj računa
+            // 3. Popis osoba i nositelj računa s limitom kapaciteta
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  'Prijavljene osobe u apartmanu',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Prijavljene osobe',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
+                    Text(
+                      '$_brojOsoba / $_maxKapacitet osoba',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: _brojOsoba >= _maxKapacitet ? Colors.orange.shade800 : Colors.grey,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                 ),
-                TextButton.icon(
-                  onPressed: _dodajNovogGosta,
-                  icon: const Icon(Icons.person_add),
+                ElevatedButton.icon(
+                  onPressed: _brojOsoba >= _maxKapacitet ? null : _dodajNovogGosta,
+                  icon: const Icon(Icons.person_add, size: 18),
                   label: const Text('Dodaj osobu'),
                 ),
               ],
             ),
+            const SizedBox(height: 4),
             const Text(
               'Označite kvačicom osobu na čije ime ide račun:',
               style: TextStyle(fontSize: 12, color: Colors.grey),
@@ -341,15 +478,13 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
               return Card(
                 margin: const EdgeInsets.only(bottom: 8),
                 child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   child: Row(
                     children: [
                       Radio<int>(
                         value: idx,
                         groupValue: _nositeljIndex,
-                        onChanged: (val) =>
-                            setState(() => _nositeljIndex = val!),
+                        onChanged: (val) => setState(() => _nositeljIndex = val!),
                       ),
                       Expanded(
                         child: Column(
@@ -380,15 +515,13 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
                         ),
                       ),
                       IconButton(
-                        icon: const Icon(Icons.document_scanner,
-                            color: Colors.blue),
+                        icon: const Icon(Icons.document_scanner, color: Colors.blue),
                         tooltip: 'OCR Skeniraj (Kamera ili Galerija)',
                         onPressed: () => _skenirajZaGosta(idx),
                       ),
                       if (_imeControllers.length > 1)
                         IconButton(
-                          icon: const Icon(Icons.remove_circle,
-                              color: Colors.red),
+                          icon: const Icon(Icons.remove_circle, color: Colors.red),
                           onPressed: () => _ukloniGosta(idx),
                         ),
                     ],
@@ -410,8 +543,7 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
                 Expanded(
                   child: TextFormField(
                     controller: _cijenaController,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     decoration: const InputDecoration(
                       labelText: 'Cijena os./noć (€)',
                       border: OutlineInputBorder(),
