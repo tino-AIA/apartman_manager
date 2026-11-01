@@ -94,12 +94,14 @@ class _RacuniScreenState extends State<RacuniScreen> {
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () {
-              _service.obrisiBoravak(b.id);
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Račun ${b.racunBroj} obrisan.')),
-              );
+            onPressed: () async {
+              await _service.obrisiBoravak(b.id);
+              if (ctx.mounted) Navigator.pop(ctx);
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Račun ${b.racunBroj} obrisan. Brojevi računa su usklađeni.')),
+                );
+              }
             },
             child: const Text('Obriši', style: TextStyle(color: Colors.white)),
           ),
@@ -181,13 +183,31 @@ class _RacuniScreenState extends State<RacuniScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final racuni = _service.boravci;
+    // Sortiranje računa silazno (najnoviji račun na vrhu liste računa)
+    final racuni = List<TuristBoravak>.from(_service.boravci);
+    racuni.sort((a, b) {
+      final rbrA = int.tryParse(a.racunBroj.split('/').first) ?? 0;
+      final rbrB = int.tryParse(b.racunBroj.split('/').first) ?? 0;
+      return rbrB.compareTo(rbrA);
+    });
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Izdani računi'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.auto_fix_high),
+            tooltip: 'Uskladi brojeve računa (1, 2, 3...)',
+            onPressed: () async {
+              await _service.renumerirajSveRacune();
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Brojevi računa su uspješno usklađeni.')),
+                );
+              }
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'Osvježi račune i postavke',
