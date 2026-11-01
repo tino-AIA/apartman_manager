@@ -54,11 +54,12 @@ class _KnjigaPrometaScreenState extends State<KnjigaPrometaScreen> {
 
   Future<void> _ucitajPostavke() async {
     try {
-      final res = await Supabase.instance.client
-          .from('postavke_vlasnik')
-          .select()
-          .limit(1)
-          .maybeSingle();
+      final user = Supabase.instance.client.auth.currentUser;
+      var query = Supabase.instance.client.from('postavke_vlasnik').select();
+
+      final res = user != null
+          ? await query.eq('user_id', user.id).maybeSingle()
+          : await query.limit(1).maybeSingle();
 
       if (res != null && mounted) {
         setState(() {
@@ -78,6 +79,20 @@ class _KnjigaPrometaScreenState extends State<KnjigaPrometaScreen> {
     } catch (e) {
       debugPrint('Greška pri dohvaćanju postavki za Knjigu EP: $e');
     }
+  }
+
+  /// Pomoćna metoda koja sortira boravke od računa br. 1 prema gore
+  List<TuristBoravak> _dohvatiSortiraniPromet() {
+    final lista = List<TuristBoravak>.from(_service.boravci);
+    lista.sort((a, b) {
+      final rbrA = int.tryParse(a.racunBroj.split('/').first) ?? 0;
+      final rbrB = int.tryParse(b.racunBroj.split('/').first) ?? 0;
+      if (rbrA != rbrB) {
+        return rbrA.compareTo(rbrB); // Uzlazno: 1, 2, 3...
+      }
+      return a.datumDolaska.compareTo(b.datumDolaska);
+    });
+    return lista;
   }
 
   void _potvrdiBrisanje(BuildContext context, TuristBoravak b) {
@@ -110,7 +125,12 @@ class _KnjigaPrometaScreenState extends State<KnjigaPrometaScreen> {
     );
   }
 
-  void _izveziPdf() {
+  Future<void> _izveziPdf() async {
+    await _ucitajPostavke();
+    if (!mounted) return;
+
+    final sortiraniPromet = _dohvatiSortiraniPromet();
+
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -118,7 +138,7 @@ class _KnjigaPrometaScreenState extends State<KnjigaPrometaScreen> {
           appBar: AppBar(title: const Text('Obrazac EP - Pregled PDF-a')),
           body: PdfPreview(
             build: (format) => KprExportService.generirajKprPdf(
-              stavke: _service.boravci,
+              stavke: sortiraniPromet,
               postavke: _postavke,
               godina: DateTime.now().year,
             ),
@@ -129,9 +149,12 @@ class _KnjigaPrometaScreenState extends State<KnjigaPrometaScreen> {
   }
 
   Future<void> _izveziExcel() async {
+    await _ucitajPostavke();
     final godina = DateTime.now().year;
+    final sortiraniPromet = _dohvatiSortiraniPromet();
+
     final bytes = KprExportService.generirajKprExcel(
-      stavke: _service.boravci,
+      stavke: sortiraniPromet,
       postavke: _postavke,
       godina: godina,
     );
@@ -147,15 +170,24 @@ class _KnjigaPrometaScreenState extends State<KnjigaPrometaScreen> {
   @override
   Widget build(BuildContext context) {
     final df = DateFormat('dd.MM.yyyy.');
-    final promet = _service.boravci;
+    final promet = _dohvatiSortiraniPromet();
     final ukupniPromet = promet.fold<double>(0.0, (sum, i) => sum + i.cijenaUkupno);
     final godina = DateTime.now().year;
+    final aktivnePostavke = _postavke.imePrezime.isNotEmpty ? _postavke : _service.postavke;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Knjiga prometa (Obrazac EP)'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Osvježi podatke',
+            onPressed: () {
+              _ucitajPostavke();
+              _service.ucitajIzSupabase();
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.table_view, color: Colors.green),
             tooltip: 'Izvezi u Excel (.xlsx)',
@@ -181,13 +213,15 @@ class _KnjigaPrometaScreenState extends State<KnjigaPrometaScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      _postavke.imePrezime.isNotEmpty ? _postavke.imePrezime : _postavke.nazivObjekta,
+                      aktivnePostavke.imePrezime.isNotEmpty
+                          ? aktivnePostavke.imePrezime
+                          : (aktivnePostavke.nazivObjekta.isNotEmpty ? aktivnePostavke.nazivObjekta : 'Vlasnik'),
                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                     ),
                     const Text('Obrazac EP', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0D47A1))),
                   ],
                 ),
-                Text('OIB: ${_postavke.oib} • ${_postavke.adresa}, ${_postavke.mjesto}'),
+                Text('OIB: ${aktivnePostavke.oib} • ${aktivnePostavke.adresa}, ${aktivnePostavke.mjesto}'),
                 const SizedBox(height: 8),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
