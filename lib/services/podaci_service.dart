@@ -113,9 +113,17 @@ class PodaciService extends ChangeNotifier {
   Future<void> _provjeriIUskladiBrojeveRacuna() async {
     bool biloIzmjena = false;
 
+    // Grupiraj po godinama iz postojećeg broja računa ili datuma
     final Map<int, List<TuristBoravak>> poGodinama = {};
     for (var b in _boravci) {
-      final g = b.datumDolaska.year;
+      int g = b.datumDolaska.year;
+      final parts = b.racunBroj.split('/');
+      if (parts.length == 2) {
+        final parsedG = int.tryParse(parts[1]);
+        if (parsedG != null) {
+          g = 2000 + parsedG;
+        }
+      }
       poGodinama.putIfAbsent(g, () => []).add(b);
     }
 
@@ -124,8 +132,17 @@ class PodaciService extends ChangeNotifier {
       final dvoznamenkastaGodina = (godina % 100).toString().padLeft(2, '0');
       final lista = entry.value;
 
-      lista.sort((a, b) => a.datumDolaska.compareTo(b.datumDolaska));
+      // Sortiraj prema postojećem broju računa (1, 2, 3...), a NE po datumu dolaska
+      lista.sort((a, b) {
+        final rbrA = int.tryParse(a.racunBroj.split('/').first) ?? 999999;
+        final rbrB = int.tryParse(b.racunBroj.split('/').first) ?? 999999;
+        if (rbrA != rbrB) {
+          return rbrA.compareTo(rbrB);
+        }
+        return a.datumDolaska.compareTo(b.datumDolaska);
+      });
 
+      // Popuni rupe u numeraciji ako je neki račun izbrisan
       for (int i = 0; i < lista.length; i++) {
         final ocekivaniBroj = '${i + 1}/$dvoznamenkastaGodina';
         final stari = lista[i];
@@ -133,7 +150,6 @@ class PodaciService extends ChangeNotifier {
         if (stari.racunBroj != ocekivaniBroj) {
           biloIzmjena = true;
 
-          // Kreiraj novi objekt s ažuriranim brojem računa
           final azurirani = TuristBoravak(
             id: stari.id,
             apartmanNaziv: stari.apartmanNaziv,
@@ -169,7 +185,11 @@ class PodaciService extends ChangeNotifier {
     }
 
     if (biloIzmjena) {
-      _boravci.sort((a, b) => a.datumDolaska.compareTo(b.datumDolaska));
+      _boravci.sort((a, b) {
+        final rbrA = int.tryParse(a.racunBroj.split('/').first) ?? 999999;
+        final rbrB = int.tryParse(b.racunBroj.split('/').first) ?? 999999;
+        return rbrA.compareTo(rbrB);
+      });
     }
   }
 
