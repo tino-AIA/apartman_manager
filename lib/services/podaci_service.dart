@@ -2,6 +2,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/turist_model.dart';
+import '../models/postavke_model.dart';
 
 class ApartmanModel {
   final String id;
@@ -33,6 +34,17 @@ class PodaciService extends ChangeNotifier {
 
   SupabaseClient get _supabase => Supabase.instance.client;
 
+  PostavkeIznajmljivaca _postavke = PostavkeIznajmljivaca(
+    nazivObjekta: '',
+    imePrezime: '',
+    oib: '',
+    mjesto: '',
+    adresa: '',
+    telefon: '',
+    email: '',
+  );
+  PostavkeIznajmljivaca get postavke => _postavke;
+
   List<ApartmanModel> _apartmani = [];
   List<ApartmanModel> get apartmani => _apartmani;
 
@@ -47,19 +59,43 @@ class PodaciService extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final apartmaniRes = await _supabase
-          .from('smjestajne_jedinice')
-          .select()
-          .order('naziv', ascending: true);
+      final user = _supabase.auth.currentUser;
+
+      // 1. Dinamičko učitavanje postavki vlasnika iz baze
+      var postavkeQuery = _supabase.from('postavke_vlasnik').select();
+      final pRes = user != null
+          ? await postavkeQuery.eq('user_id', user.id).maybeSingle()
+          : await postavkeQuery.limit(1).maybeSingle();
+
+      if (pRes != null) {
+        _postavke = PostavkeIznajmljivaca(
+          nazivObjekta: pRes['naziv_objekta']?.toString() ?? '',
+          imePrezime: pRes['ime_prezime']?.toString() ?? '',
+          oib: pRes['oib']?.toString() ?? '',
+          mjesto: pRes['mjesto']?.toString() ?? '',
+          adresa: pRes['adresa']?.toString() ?? '',
+          telefon: pRes['telefon']?.toString() ?? '',
+          email: pRes['email']?.toString() ?? '',
+          pdvNapomena: pRes['pdv_napomena']?.toString() ??
+              'Obveznik nije u sustavu PDV-a, sukladno odredbama čl. 90. st. 2. Zakona o PDV-u. PDV nije obračunat.',
+        );
+      }
+
+      // 2. Učitavanje smještajnih jedinica
+      var apartmaniQuery = _supabase.from('smjestajne_jedinice').select();
+      final apartmaniRes = user != null
+          ? await apartmaniQuery.eq('user_id', user.id).order('naziv', ascending: true)
+          : await apartmaniQuery.order('naziv', ascending: true);
 
       _apartmani = (apartmaniRes as List<dynamic>)
           .map((e) => ApartmanModel.fromMap(Map<String, dynamic>.from(e as Map)))
           .toList();
 
-      final boravciRes = await _supabase
-          .from('turisti_boravci')
-          .select()
-          .order('created_at', ascending: false);
+      // 3. Učitavanje boravaka
+      var boravciQuery = _supabase.from('turisti_boravci').select();
+      final boravciRes = user != null
+          ? await boravciQuery.eq('user_id', user.id).order('created_at', ascending: false)
+          : await boravciQuery.order('created_at', ascending: false);
 
       _boravci = (boravciRes as List<dynamic>)
           .map<TuristBoravak>((e) => TuristBoravak.fromMap(Map<String, dynamic>.from(e as Map)))
@@ -133,7 +169,11 @@ class PodaciService extends ChangeNotifier {
     final mapaZaSpremanje = boravak.toMap();
     mapaZaSpremanje['created_at'] = DateTime.now().toIso8601String();
 
-    // Izravan upis bez sakrivanja greške
+    final user = _supabase.auth.currentUser;
+    if (user != null) {
+      mapaZaSpremanje['user_id'] = user.id;
+    }
+
     await _supabase.from('turisti_boravci').upsert(mapaZaSpremanje);
 
     _boravci.removeWhere((b) => b.id == boravak.id);
