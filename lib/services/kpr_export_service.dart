@@ -20,21 +20,21 @@ class KprExportService {
     excel.setDefaultSheet('Export');
 
     // Zaglavlje obrasca
-    sheet.appendRow([const TextCellValue('1. OPĆI PODACI O POREZNOM OBVEZNIKU'), const TextCellValue('Obrazac EP')]);
-    sheet.appendRow([const TextCellValue('1.1 IME I PREZIME'), TextCellValue(postavke.imePrezime)]);
-    sheet.appendRow([const TextCellValue('1.2 OIB'), TextCellValue(postavke.oib)]);
-    sheet.appendRow([const TextCellValue('1.3 MJESTO PREBIVALIŠTA / BORAVIŠTA'), TextCellValue(postavke.mjesto)]);
-    sheet.appendRow([const TextCellValue('1.4 ADRESA PREBIVALIŠTA / BORAVIŠTA'), TextCellValue(postavke.adresa)]);
+    sheet.appendRow([TextCellValue('1. OPĆI PODACI O POREZNOM OBVEZNIKU'), TextCellValue('Obrazac EP')]);
+    sheet.appendRow([TextCellValue('1.1 IME I PREZIME'), TextCellValue(postavke.imePrezime)]);
+    sheet.appendRow([TextCellValue('1.2 OIB'), TextCellValue(postavke.oib)]);
+    sheet.appendRow([TextCellValue('1.3 MJESTO PREBIVALIŠTA / BORAVIŠTA'), TextCellValue(postavke.mjesto)]);
+    sheet.appendRow([TextCellValue('1.4 ADRESA PREBIVALIŠTA / BORAVIŠTA'), TextCellValue(postavke.adresa)]);
     sheet.appendRow([TextCellValue('EVIDENCIJA O PROMETU ZA : $godina. godinu')]);
-    sheet.appendRow([const TextCellValue('')]);
+    sheet.appendRow([TextCellValue('')]);
 
     // Zaglavlje tablice
     sheet.appendRow([
-      const TextCellValue('Redni broj'),
-      const TextCellValue('Broj računa'),
-      const TextCellValue('Nadnevak'),
-      const TextCellValue('KORISNIK USLUGE (Prezime i ime)'),
-      const TextCellValue('IZNOS RAČUNA (EUR)'),
+      TextCellValue('Redni broj'),
+      TextCellValue('Broj računa'),
+      TextCellValue('Nadnevak'),
+      TextCellValue('KORISNIK USLUGE (Prezime i ime)'),
+      TextCellValue('IZNOS RAČUNA (EUR)'),
     ]);
 
     double ukupno = 0.0;
@@ -52,12 +52,12 @@ class KprExportService {
       ]);
     }
 
-    sheet.appendRow([const TextCellValue('')]);
+    sheet.appendRow([TextCellValue('')]);
     sheet.appendRow([
-      const TextCellValue('TOTAL'),
-      const TextCellValue(''),
-      const TextCellValue(''),
-      const TextCellValue(''),
+      TextCellValue('TOTAL'),
+      TextCellValue(''),
+      TextCellValue(''),
+      TextCellValue(''),
       DoubleCellValue(ukupno),
     ]);
 
@@ -70,7 +70,7 @@ class KprExportService {
     required PostavkeIznajmljivaca postavke,
     required int godina,
   }) async {
-    // Učitavanje fontova s punom podrškom za hrvatske dijakritike
+    // Učitavanje fontova s punom podrškom za hrvatske dijakritike (č, ć, ž, š, đ)
     final fontRegular = await PdfGoogleFonts.robotoRegular();
     final fontBold = await PdfGoogleFonts.robotoBold();
 
