@@ -42,15 +42,21 @@ class _RacuniScreenState extends State<RacuniScreen> {
     super.dispose();
   }
 
-  void _osvjezi() => setState(() {});
+  void _osvjezi() {
+    if (mounted) {
+      _ucitajPostavke();
+      setState(() {});
+    }
+  }
 
   Future<void> _ucitajPostavke() async {
     try {
-      final res = await Supabase.instance.client
-          .from('postavke_vlasnik')
-          .select()
-          .limit(1)
-          .maybeSingle();
+      final user = Supabase.instance.client.auth.currentUser;
+      var query = Supabase.instance.client.from('postavke_vlasnik').select();
+
+      final res = user != null
+          ? await query.eq('user_id', user.id).maybeSingle()
+          : await query.limit(1).maybeSingle();
 
       if (res != null && mounted) {
         setState(() {
@@ -102,7 +108,17 @@ class _RacuniScreenState extends State<RacuniScreen> {
     );
   }
 
-  void _otvoriPdf(TuristBoravak boravak) {
+  PostavkeIznajmljivaca get _aktivnePostavke {
+    if (_postavke.imePrezime.isNotEmpty || _postavke.nazivObjekta.isNotEmpty) {
+      return _postavke;
+    }
+    return _service.postavke;
+  }
+
+  Future<void> _otvoriPdf(TuristBoravak boravak) async {
+    await _ucitajPostavke();
+    if (!mounted) return;
+
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -111,7 +127,7 @@ class _RacuniScreenState extends State<RacuniScreen> {
           body: PdfPreview(
             build: (format) => PdfRacunService.generirajRacunPdf(
               boravak: boravak,
-              postavke: _postavke,
+              postavke: _aktivnePostavke,
             ),
           ),
         ),
@@ -119,10 +135,13 @@ class _RacuniScreenState extends State<RacuniScreen> {
     );
   }
 
-  void _prikaziTermoIspis(TuristBoravak boravak) {
+  Future<void> _prikaziTermoIspis(TuristBoravak boravak) async {
+    await _ucitajPostavke();
+    if (!mounted) return;
+
     final termoTekst = EscPosPrinterService.formatirajZa58mm(
       boravak: boravak,
-      postavke: _postavke,
+      postavke: _aktivnePostavke,
     );
 
     showDialog(
@@ -168,6 +187,16 @@ class _RacuniScreenState extends State<RacuniScreen> {
       appBar: AppBar(
         title: const Text('Izdani računi'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Osvježi račune i postavke',
+            onPressed: () {
+              _ucitajPostavke();
+              _service.ucitajIzSupabase();
+            },
+          ),
+        ],
       ),
       body: racuni.isEmpty
           ? const Center(
