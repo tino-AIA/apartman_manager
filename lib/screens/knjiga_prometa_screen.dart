@@ -45,7 +45,12 @@ class _KnjigaPrometaScreenState extends State<KnjigaPrometaScreen> {
     super.dispose();
   }
 
-  void _osvjezi() => setState(() {});
+  void _osvjezi() {
+    if (mounted) {
+      _ucitajPostavke();
+      setState(() {});
+    }
+  }
 
   Future<void> _ucitajPostavke() async {
     try {
@@ -175,8 +180,10 @@ class _KnjigaPrometaScreenState extends State<KnjigaPrometaScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(_postavke.imePrezime.isNotEmpty ? _postavke.imePrezime : _postavke.nazivObjekta,
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    Text(
+                      _postavke.imePrezime.isNotEmpty ? _postavke.imePrezime : _postavke.nazivObjekta,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
                     const Text('Obrazac EP', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0D47A1))),
                   ],
                 ),
