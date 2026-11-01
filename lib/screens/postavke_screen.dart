@@ -13,8 +13,6 @@ class PostavkeScreen extends StatefulWidget {
 }
 
 class _PostavkeScreenState extends State<PostavkeScreen> {
-  static const String _vlasnikUuid = '00000000-0000-0000-0000-000000000001';
-
   final _nazivObjektaCtrl = TextEditingController();
   final _imePrezimeCtrl = TextEditingController();
   final _oibCtrl = TextEditingController();
@@ -30,6 +28,7 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
   List<SmjestajnaJedinica> _jedinice = [];
   bool _ucitavanje = true;
   bool _spremam = false;
+  String? _postojeciZapisId;
 
   @override
   void initState() {
@@ -53,15 +52,16 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
   Future<void> _ucitajPodatkeIzBaze() async {
     setState(() => _ucitavanje = true);
     final supabase = Supabase.instance.client;
+    final user = supabase.auth.currentUser;
 
     try {
-      final vlasnikRes = await supabase
-          .from('postavke_vlasnik')
-          .select()
-          .limit(1)
-          .maybeSingle();
+      var query = supabase.from('postavke_vlasnik').select();
+      final vlasnikRes = user != null
+          ? await query.eq('user_id', user.id).maybeSingle()
+          : await query.limit(1).maybeSingle();
 
       if (vlasnikRes != null) {
+        _postojeciZapisId = vlasnikRes['id']?.toString();
         _nazivObjektaCtrl.text = vlasnikRes['naziv_objekta']?.toString() ?? '';
         _imePrezimeCtrl.text = vlasnikRes['ime_prezime']?.toString() ?? '';
         _oibCtrl.text = vlasnikRes['oib']?.toString() ?? '';
@@ -75,10 +75,10 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
         }
       }
 
-      final jediniceRes = await supabase
-          .from('smjestajne_jedinice')
-          .select()
-          .order('naziv', ascending: true);
+      var jediniceQuery = supabase.from('smjestajne_jedinice').select();
+      final jediniceRes = user != null
+          ? await jediniceQuery.eq('user_id', user.id).order('naziv', ascending: true)
+          : await jediniceQuery.order('naziv', ascending: true);
 
       if (jediniceRes is List && (jediniceRes as List).isNotEmpty) {
         _jedinice = (jediniceRes as List).map((j) {
@@ -369,11 +369,11 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
   Future<void> _spremiSveUBazu() async {
     setState(() => _spremam = true);
     final supabase = Supabase.instance.client;
+    final user = supabase.auth.currentUser;
 
     try {
-      // 1. Spremanje postavki vlasnika
-      await supabase.from('postavke_vlasnik').upsert({
-        'id': _vlasnikUuid,
+      // 1. Spremanje postavki vlasnika vezanih uz aktivnog korisnika
+      final podaciVlasnika = <String, dynamic>{
         'naziv_objekta': _nazivObjektaCtrl.text.trim(),
         'ime_prezime': _imePrezimeCtrl.text.trim(),
         'oib': _oibCtrl.text.trim(),
@@ -382,13 +382,32 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
         'telefon': _telefonCtrl.text.trim(),
         'email': _emailCtrl.text.trim(),
         'pdv_napomena': _pdvNapomenaCtrl.text.trim(),
-      });
+      };
 
-      // 2. Brisanje starih jedinica i upis novih
-      await supabase
-          .from('smjestajne_jedinice')
-          .delete()
-          .neq('naziv', '__NEPOSTOJECA_STAVKA__');
+      if (user != null) {
+        podaciVlasnika['user_id'] = user.id;
+      }
+      if (_postojeciZapisId != null && _postojeciZapisId!.isNotEmpty) {
+        podaciVlasnika['id'] = _postojeciZapisId;
+      }
+
+      final upsertRes = await supabase
+          .from('postavke_vlasnik')
+          .upsert(podaciVlasnika)
+          .select()
+          .maybeSingle();
+
+      if (upsertRes != null && upsertRes['id'] != null) {
+        _postojeciZapisId = upsertRes['id'].toString();
+      }
+
+      // 2. Brisanje starih jedinica i upis novih za prijavljenog korisnika
+      var deleteQuery = supabase.from('smjestajne_jedinice').delete();
+      if (user != null) {
+        await deleteQuery.eq('user_id', user.id);
+      } else {
+        await deleteQuery.neq('naziv', '__NEPOSTOJECA_STAVKA__');
+      }
 
       for (var j in _jedinice) {
         final cjenikJson = j.cjenikSezone
@@ -415,6 +434,10 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
           'cjenik': cjenikJson,
           'cjenik_sezone': cjenikJson,
         };
+
+        if (user != null) {
+          zapis['user_id'] = user.id;
+        }
 
         if (RegExp(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
             .hasMatch(j.id)) {
