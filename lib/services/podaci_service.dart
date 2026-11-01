@@ -61,7 +61,7 @@ class PodaciService extends ChangeNotifier {
     try {
       final user = _supabase.auth.currentUser;
 
-      // 1. Dinamičko učitavanje postavki vlasnika iz baze
+      // 1. Postavke vlasnika
       var postavkeQuery = _supabase.from('postavke_vlasnik').select();
       final pRes = user != null
           ? await postavkeQuery.eq('user_id', user.id).maybeSingle()
@@ -81,7 +81,7 @@ class PodaciService extends ChangeNotifier {
         );
       }
 
-      // 2. Učitavanje smještajnih jedinica
+      // 2. Smještajne jedinice
       var apartmaniQuery = _supabase.from('smjestajne_jedinice').select();
       final apartmaniRes = user != null
           ? await apartmaniQuery.eq('user_id', user.id).order('naziv', ascending: true)
@@ -91,21 +91,74 @@ class PodaciService extends ChangeNotifier {
           .map((e) => ApartmanModel.fromMap(Map<String, dynamic>.from(e as Map)))
           .toList();
 
-      // 3. Učitavanje boravaka
+      // 3. Boravci (sortirani uzlazno po datumu radi točne kronologije)
       var boravciQuery = _supabase.from('turisti_boravci').select();
       final boravciRes = user != null
-          ? await boravciQuery.eq('user_id', user.id).order('created_at', ascending: false)
-          : await boravciQuery.order('created_at', ascending: false);
+          ? await boravciQuery.eq('user_id', user.id).order('datum_dolaska', ascending: true)
+          : await boravciQuery.order('datum_dolaska', ascending: true);
 
       _boravci = (boravciRes as List<dynamic>)
           .map<TuristBoravak>((e) => TuristBoravak.fromMap(Map<String, dynamic>.from(e as Map)))
           .toList();
+
+      // Ako postoje praznine u brojevima računa, automatski ih uskladi
+      await _provjeriIUskladiBrojeveRacuna();
     } catch (e) {
       debugPrint('Greška pri učitavanju iz Supabasea: $e');
     } finally {
       _ucitavanje = false;
       notifyListeners();
     }
+  }
+
+  /// Provjerava jesu li računi tekućih godina u kontinuitetu (1, 2, 3...)
+  /// Ako nisu, automatski ih ažurira u bazi i listi.
+  Future<void> _provjeriIUskladiBrojeveRacuna() async {
+    bool biloIzmjena = false;
+
+    // Grupiraj po godinama dolaska
+    final Map<int, List<TuristBoravak>> poGodinama = {};
+    for (var b in _boravci) {
+      final g = b.datumDolaska.year;
+      poGodinama.putIfAbsent(g, () => []).add(b);
+    }
+
+    for (var entry in poGodinama.entries) {
+      final godina = entry.key;
+      final dvoznamenkastaGodina = (godina % 100).toString().padLeft(2, '0');
+      final lista = entry.value;
+
+      // Kronološki poredaj (najraniji boravak dobiva broj 1)
+      lista.sort((a, b) => a.datumDolaska.compareTo(b.datumDolaska));
+
+      for (int i = 0; i < lista.length; i++) {
+        final ocekivaniBroj = '${i + 1}/$dvoznamenkastaGodina';
+        if (lista[i].racunBroj != ocekivaniBroj) {
+          biloIzmjena = true;
+          lista[i].racunBroj = ocekivaniBroj;
+
+          // Ažuriraj u bazi Supabase
+          try {
+            await _supabase
+                .from('turisti_boravci')
+                .update({'racun_broj': ocekivaniBroj})
+                .eq('id', lista[i].id);
+          } catch (e) {
+            debugPrint('Greška pri ažuriranju broja računa ${lista[i].id}: $e');
+          }
+        }
+      }
+    }
+
+    if (biloIzmjena) {
+      // Osvježi lokalnu listu sortiranu po datumu
+      _boravci.sort((a, b) => a.datumDolaska.compareTo(b.datumDolaska));
+    }
+  }
+
+  Future<void> renumerirajSveRacune() async {
+    await _provjeriIUskladiBrojeveRacuna();
+    notifyListeners();
   }
 
   String generirajSljedeciBrojRacuna(DateTime datum) {
@@ -177,7 +230,8 @@ class PodaciService extends ChangeNotifier {
     await _supabase.from('turisti_boravci').upsert(mapaZaSpremanje);
 
     _boravci.removeWhere((b) => b.id == boravak.id);
-    _boravci.insert(0, boravak);
+    _boravci.add(boravak);
+    await _provjeriIUskladiBrojeveRacuna();
     notifyListeners();
   }
 
@@ -190,13 +244,20 @@ class PodaciService extends ChangeNotifier {
     final index = _boravci.indexWhere((b) => b.id == id);
     if (index != -1) {
       _boravci[index] = boravak;
+      await _provjeriIUskladiBrojeveRacuna();
       notifyListeners();
     }
   }
 
   Future<void> obrisiBoravak(dynamic id) async {
+    // 1. Obriši iz baze
     await _supabase.from('turisti_boravci').delete().eq('id', id.toString());
     _boravci.removeWhere((b) => b.id.toString() == id.toString());
+
+    // 2. Automatski presloži brojeve svih preostalih računa da nema rupa (1, 2, 3...)
+    await _provjeriIUskladiBrojeveRacuna();
+
+    // 3. Obavijesti sve ekrane da prikažu nove brojeve
     notifyListeners();
   }
 }
