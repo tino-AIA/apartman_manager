@@ -258,10 +258,11 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
         ));
       }
 
+      // Novi račun uvijek dobiva sljedeći najveći broj neovisno o datumu dolaska
       final String dodijeljeniBrojRacuna =
           (widget.postojeci != null && widget.postojeci!.racunBroj.isNotEmpty)
               ? widget.postojeci!.racunBroj
-              : _service.generirajSljedeciBrojRacuna(_dolazak);
+              : _service.generirajSljedeciBrojRacuna();
 
       final noviBoravak = TuristBoravak(
         id: widget.postojeci?.id.isNotEmpty == true
