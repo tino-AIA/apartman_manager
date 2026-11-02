@@ -91,17 +91,22 @@ class PodaciService extends ChangeNotifier {
           .map((e) => ApartmanModel.fromMap(Map<String, dynamic>.from(e as Map)))
           .toList();
 
-      // 3. Boravci
+      // 3. Boravci (učitan redoslijed)
       var boravciQuery = _supabase.from('turisti_boravci').select();
       final boravciRes = user != null
-          ? await boravciQuery.eq('user_id', user.id).order('datum_dolaska', ascending: true)
-          : await boravciQuery.order('datum_dolaska', ascending: true);
+          ? await boravciQuery.eq('user_id', user.id)
+          : await boravciQuery;
 
       _boravci = (boravciRes as List<dynamic>)
           .map<TuristBoravak>((e) => TuristBoravak.fromMap(Map<String, dynamic>.from(e as Map)))
           .toList();
 
-      await _provjeriIUskladiBrojeveRacuna();
+      // Poredaj po postojećem broju računa (1, 2, 3...)
+      _boravci.sort((a, b) {
+        final rbrA = int.tryParse(a.racunBroj.split('/').first) ?? 999999;
+        final rbrB = int.tryParse(b.racunBroj.split('/').first) ?? 999999;
+        return rbrA.compareTo(rbrB);
+      });
     } catch (e) {
       debugPrint('Greška pri učitavanju iz Supabasea: $e');
     } finally {
@@ -110,13 +115,28 @@ class PodaciService extends ChangeNotifier {
     }
   }
 
-  Future<void> _provjeriIUskladiBrojeveRacuna() async {
-    bool biloIzmjena = false;
+  /// Pomoćna metoda za izvlačenje rednog broja iz stringa poput '3/26'
+  int _izvuciBrojRacuna(String racunBroj) {
+    if (racunBroj.isEmpty) return 999999;
+    final dijelovi = racunBroj.split('/');
+    return int.tryParse(dijelovi.first) ?? 999999;
+  }
 
-    // Grupiraj po godinama iz postojećeg broja računa ili datuma
+  /// Pomoćna metoda za određivanje vremena nastanka boravka
+  int _izvuciTimestampNastanka(TuristBoravak b) {
+    if (b.id.startsWith('boravak_')) {
+      final tsStr = b.id.replaceFirst('boravak_', '');
+      final ts = int.tryParse(tsStr);
+      if (ts != null) return ts;
+    }
+    return b.datumDolaska.millisecondsSinceEpoch;
+  }
+
+  /// Usklađuje i zatvara rupe (npr. nakon brisanja) bez utjecaja na datume boravka
+  Future<void> _provjeriIUskladiBrojeveRacuna() async {
     final Map<int, List<TuristBoravak>> poGodinama = {};
     for (var b in _boravci) {
-      int g = b.datumDolaska.year;
+      int g = DateTime.now().year;
       final parts = b.racunBroj.split('/');
       if (parts.length == 2) {
         final parsedG = int.tryParse(parts[1]);
@@ -132,24 +152,22 @@ class PodaciService extends ChangeNotifier {
       final dvoznamenkastaGodina = (godina % 100).toString().padLeft(2, '0');
       final lista = entry.value;
 
-      // Sortiraj prema postojećem broju računa (1, 2, 3...), a NE po datumu dolaska
+      // Sortiraj isključivo po postojećem broju računa ili vremenu unosa
       lista.sort((a, b) {
-        final rbrA = int.tryParse(a.racunBroj.split('/').first) ?? 999999;
-        final rbrB = int.tryParse(b.racunBroj.split('/').first) ?? 999999;
-        if (rbrA != rbrB) {
-          return rbrA.compareTo(rbrB);
+        final brA = _izvuciBrojRacuna(a.racunBroj);
+        final brB = _izvuciBrojRacuna(b.racunBroj);
+        if (brA != brB && brA != 999999 && brB != 999999) {
+          return brA.compareTo(brB);
         }
-        return a.datumDolaska.compareTo(b.datumDolaska);
+        return _izvuciTimestampNastanka(a).compareTo(_izvuciTimestampNastanka(b));
       });
 
-      // Popuni rupe u numeraciji ako je neki račun izbrisan
+      // Popuni rupe: 1, 2, 3, 4, 5...
       for (int i = 0; i < lista.length; i++) {
         final ocekivaniBroj = '${i + 1}/$dvoznamenkastaGodina';
         final stari = lista[i];
 
         if (stari.racunBroj != ocekivaniBroj) {
-          biloIzmjena = true;
-
           final azurirani = TuristBoravak(
             id: stari.id,
             apartmanNaziv: stari.apartmanNaziv,
@@ -184,13 +202,7 @@ class PodaciService extends ChangeNotifier {
       }
     }
 
-    if (biloIzmjena) {
-      _boravci.sort((a, b) {
-        final rbrA = int.tryParse(a.racunBroj.split('/').first) ?? 999999;
-        final rbrB = int.tryParse(b.racunBroj.split('/').first) ?? 999999;
-        return rbrA.compareTo(rbrB);
-      });
-    }
+    _boravci.sort((a, b) => _izvuciBrojRacuna(a.racunBroj).compareTo(_izvuciBrojRacuna(b.racunBroj)));
   }
 
   Future<void> renumerirajSveRacune() async {
@@ -199,18 +211,17 @@ class PodaciService extends ChangeNotifier {
   }
 
   String generirajSljedeciBrojRacuna(DateTime datum) {
-    final dvoznamenkastaGodina = (datum.year % 100).toString().padLeft(2, '0');
+    // Broj računa se dodjeljuje za tekuću kalendarsku godinu
+    final godina = DateTime.now().year;
+    final dvoznamenkastaGodina = (godina % 100).toString().padLeft(2, '0');
     final suffix = '/$dvoznamenkastaGodina';
 
     int maxBroj = 0;
     for (var b in _boravci) {
       if (b.racunBroj.endsWith(suffix)) {
-        final dijelovi = b.racunBroj.split('/');
-        if (dijelovi.isNotEmpty) {
-          final rbr = int.tryParse(dijelovi[0]);
-          if (rbr != null && rbr > maxBroj) {
-            maxBroj = rbr;
-          }
+        final rbr = _izvuciBrojRacuna(b.racunBroj);
+        if (rbr != 999999 && rbr > maxBroj) {
+          maxBroj = rbr;
         }
       }
     }
@@ -268,7 +279,9 @@ class PodaciService extends ChangeNotifier {
 
     _boravci.removeWhere((b) => b.id == boravak.id);
     _boravci.add(boravak);
-    await _provjeriIUskladiBrojeveRacuna();
+
+    // Sortiraj listu po broju računa
+    _boravci.sort((a, b) => _izvuciBrojRacuna(a.racunBroj).compareTo(_izvuciBrojRacuna(b.racunBroj)));
     notifyListeners();
   }
 
@@ -281,7 +294,7 @@ class PodaciService extends ChangeNotifier {
     final index = _boravci.indexWhere((b) => b.id == id);
     if (index != -1) {
       _boravci[index] = boravak;
-      await _provjeriIUskladiBrojeveRacuna();
+      _boravci.sort((a, b) => _izvuciBrojRacuna(a.racunBroj).compareTo(_izvuciBrojRacuna(b.racunBroj)));
       notifyListeners();
     }
   }
@@ -290,6 +303,7 @@ class PodaciService extends ChangeNotifier {
     await _supabase.from('turisti_boravci').delete().eq('id', id.toString());
     _boravci.removeWhere((b) => b.id.toString() == id.toString());
 
+    // Samo pri brisanju provjeri i zatvori rupe u sekvenci
     await _provjeriIUskladiBrojeveRacuna();
     notifyListeners();
   }
