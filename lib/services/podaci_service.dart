@@ -97,7 +97,7 @@ class PodaciService extends ChangeNotifier {
           .map((e) => ApartmanModel.fromMap(Map<String, dynamic>.from(e as Map)))
           .toList();
 
-      // 3. Boravci - učitaj i sortiraj STROGO po broju računa uzlazno (1, 2, 3...)
+      // 3. Boravci - učitaj sve
       var boravciQuery = _supabase.from('turisti_boravci').select();
       final boravciRes = user != null
           ? await boravciQuery.eq('user_id', user.id)
@@ -107,7 +107,11 @@ class PodaciService extends ChangeNotifier {
           .map<TuristBoravak>((e) => TuristBoravak.fromMap(Map<String, dynamic>.from(e as Map)))
           .toList();
 
+      // Sortiraj po postojećem broju računa (uzlazno)
       _boravci.sort((a, b) => _izvuciBrojRacuna(a.racunBroj).compareTo(_izvuciBrojRacuna(b.racunBroj)));
+
+      // Automatski provjeri i zatvori rupe ako postoje (npr. ako lista kreće od 3 umjesto od 1)
+      await _zatvoriRupeURacunima();
     } catch (e) {
       debugPrint('Greška pri učitavanju iz Supabasea: $e');
     } finally {
@@ -116,70 +120,59 @@ class PodaciService extends ChangeNotifier {
     }
   }
 
-  /// Zatvara rupe ISKLJUČIVO prateći postojeće redne brojeve (nema gledanja datuma dolaska!)
+  /// Zatvara rupe i ujednačava sekvencu u bazi i listi (1/26, 2/26, 3/26...)
   Future<void> _zatvoriRupeURacunima() async {
-    final Map<int, List<TuristBoravak>> poGodinama = {};
-    for (var b in _boravci) {
-      int g = DateTime.now().year;
-      final parts = b.racunBroj.split('/');
-      if (parts.length == 2) {
-        final parsedG = int.tryParse(parts[1]);
-        if (parsedG != null) {
-          g = 2000 + parsedG;
-        }
-      }
-      poGodinama.putIfAbsent(g, () => []).add(b);
-    }
+    if (_boravci.isEmpty) return;
 
-    for (var entry in poGodinama.entries) {
-      final godina = entry.key;
-      final dvoznamenkastaGodina = (godina % 100).toString().padLeft(2, '0');
-      final lista = entry.value;
-
-      // Sortiraj isključivo po postojećem broju računa (1, 2, 3, 5, 6...)
-      lista.sort((a, b) => _izvuciBrojRacuna(a.racunBroj).compareTo(_izvuciBrojRacuna(b.racunBroj)));
-
-      // Pretvori u kontinuirani niz: 1, 2, 3, 4, 5...
-      for (int i = 0; i < lista.length; i++) {
-        final ocekivaniBroj = '${i + 1}/$dvoznamenkastaGodina';
-        final stari = lista[i];
-
-        if (stari.racunBroj != ocekivaniBroj) {
-          final azurirani = TuristBoravak(
-            id: stari.id,
-            apartmanNaziv: stari.apartmanNaziv,
-            prezimeIme: stari.prezimeIme,
-            gosti: stari.gosti,
-            datumDolaska: stari.datumDolaska,
-            datumOdlaska: stari.datumOdlaska,
-            brojDana: stari.brojDana,
-            brojOsoba: stari.brojOsoba,
-            cijenaOsobaNoc: stari.cijenaOsobaNoc,
-            cijenaUkupno: stari.cijenaUkupno,
-            nacinPlacanja: stari.nacinPlacanja,
-            racunBroj: ocekivaniBroj,
-            racunIspisan: stari.racunIspisan,
-          );
-
-          lista[i] = azurirani;
-          final glavniIdx = _boravci.indexWhere((b) => b.id == stari.id);
-          if (glavniIdx != -1) {
-            _boravci[glavniIdx] = azurirani;
-          }
-
-          try {
-            await _supabase
-                .from('turisti_boravci')
-                .update({'racun_broj': ocekivaniBroj})
-                .eq('id', stari.id);
-          } catch (e) {
-            debugPrint('Greška pri ažuriranju broja računa ${stari.id}: $e');
-          }
-        }
-      }
-    }
-
+    // 1. Sortiraj postojeće boravke strogo po postojećem broju računa
     _boravci.sort((a, b) => _izvuciBrojRacuna(a.racunBroj).compareTo(_izvuciBrojRacuna(b.racunBroj)));
+
+    bool biloIzmjena = false;
+
+    // 2. Provjeri svaki račun i zatvori rupe (npr. 3, 4, 5, 6, 7 postaju 1, 2, 3, 4, 5)
+    for (int i = 0; i < _boravci.length; i++) {
+      final staraGodina = _boravci[i].racunBroj.contains('/')
+          ? _boravci[i].racunBroj.split('/')[1]
+          : ((_boravci[i].datumDolaska.year % 100).toString().padLeft(2, '0'));
+
+      final noviBroj = '${i + 1}/$staraGodina';
+
+      if (_boravci[i].racunBroj != noviBroj) {
+        biloIzmjena = true;
+        final stari = _boravci[i];
+
+        final azurirani = TuristBoravak(
+          id: stari.id,
+          apartmanNaziv: stari.apartmanNaziv,
+          prezimeIme: stari.prezimeIme,
+          gosti: stari.gosti,
+          datumDolaska: stari.datumDolaska,
+          datumOdlaska: stari.datumOdlaska,
+          brojDana: stari.brojDana,
+          brojOsoba: stari.brojOsoba,
+          cijenaOsobaNoc: stari.cijenaOsobaNoc,
+          cijenaUkupno: stari.cijenaUkupno,
+          nacinPlacanja: stari.nacinPlacanja,
+          racunBroj: noviBroj,
+          racunIspisan: stari.racunIspisan,
+        );
+
+        _boravci[i] = azurirani;
+
+        try {
+          await _supabase
+              .from('turisti_boravci')
+              .update({'racun_broj': noviBroj})
+              .eq('id', stari.id);
+        } catch (e) {
+          debugPrint('Greška pri ažuriranju broja računa ${stari.id}: $e');
+        }
+      }
+    }
+
+    if (biloIzmjena) {
+      _boravci.sort((a, b) => _izvuciBrojRacuna(a.racunBroj).compareTo(_izvuciBrojRacuna(b.racunBroj)));
+    }
   }
 
   Future<void> renumerirajSveRacune() async {
@@ -187,7 +180,7 @@ class PodaciService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Uvijek generira STROGO sljedeći najveći broj računa
+  /// Uvijek generira strogo sljedeći najveći broj računa (Max + 1)
   String generirajSljedeciBrojRacuna(DateTime datum) {
     final godina = DateTime.now().year;
     final dvoznamenkastaGodina = (godina % 100).toString().padLeft(2, '0');
@@ -255,11 +248,11 @@ class PodaciService extends ChangeNotifier {
     // Spremi u bazu
     await _supabase.from('turisti_boravci').upsert(mapaZaSpremanje);
 
-    // Dodaj u lokalnu listu bez preslagivanja postojećih!
+    // Dodaj u listu
     _boravci.removeWhere((b) => b.id == boravak.id);
     _boravci.add(boravak);
 
-    // Sortiraj listu isključivo po broju računa (1, 2, 3...)
+    // Poredaj po broju računa (novi ostaje na kraju s najvećim brojem)
     _boravci.sort((a, b) => _izvuciBrojRacuna(a.racunBroj).compareTo(_izvuciBrojRacuna(b.racunBroj)));
     notifyListeners();
   }
@@ -282,7 +275,7 @@ class PodaciService extends ChangeNotifier {
     await _supabase.from('turisti_boravci').delete().eq('id', id.toString());
     _boravci.removeWhere((b) => b.id.toString() == id.toString());
 
-    // Zatvori nastalu rupu (npr. ako je obrisan 1, 2 postaje 1, itd.)
+    // Automatski zatvori nastalu rupu (npr. ako je obrisan 1, 2 postaje 1, 3 postaje 2...)
     await _zatvoriRupeURacunima();
     notifyListeners();
   }
