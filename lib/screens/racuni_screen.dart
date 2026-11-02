@@ -85,7 +85,7 @@ class _RacuniScreenState extends State<RacuniScreen> {
         title: const Text('Potvrda brisanja računa'),
         content: Text(
           'Sigurno želite obrisati račun ${b.racunBroj} (${b.prezimeIme})?\n\n'
-          'Svi sljedeći računi i stavke u Knjizi prometa automatski će se uskladiti.',
+          'Svi sljedeći računi i Knjiga prometa automatski će se uskladiti.',
         ),
         actions: [
           TextButton(
@@ -99,7 +99,7 @@ class _RacuniScreenState extends State<RacuniScreen> {
               if (ctx.mounted) Navigator.pop(ctx);
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Račun ${b.racunBroj} obrisan. Brojevi računa su usklađeni.')),
+                  SnackBar(content: Text('Račun ${b.racunBroj} obrisan. Redoslijed je usklađen.')),
                 );
               }
             },
@@ -183,7 +183,7 @@ class _RacuniScreenState extends State<RacuniScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Sortiranje računa silazno (najnoviji račun na vrhu liste računa)
+    // Sortiraj račune silazno (najnoviji račun na vrhu)
     final racuni = List<TuristBoravak>.from(_service.boravci);
     racuni.sort((a, b) {
       final rbrA = int.tryParse(a.racunBroj.split('/').first) ?? 0;
@@ -196,18 +196,6 @@ class _RacuniScreenState extends State<RacuniScreen> {
         title: const Text('Izdani računi'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.auto_fix_high),
-            tooltip: 'Uskladi brojeve računa (1, 2, 3...)',
-            onPressed: () async {
-              await _service.renumerirajSveRacune();
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Brojevi računa su uspješno usklađeni.')),
-                );
-              }
-            },
-          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'Osvježi račune i postavke',
@@ -231,7 +219,7 @@ class _RacuniScreenState extends State<RacuniScreen> {
               separatorBuilder: (_, __) => const Divider(height: 1),
               itemBuilder: (context, index) {
                 final r = racuni[index];
-                final rBrojPrikaz = r.racunBroj.isNotEmpty ? r.racunBroj : '${index + 1}/26';
+                final rBrojPrikaz = r.racunBroj;
                 final oznakaBroja = rBrojPrikaz.split('/').first;
 
                 return ListTile(
