@@ -42,24 +42,24 @@ jobs:
 
           # 2. Zaključavanje NDK verzije i onemogućavanje R8 u build.gradle.kts
           python3 -c '
-          import os
+          import os, re
 
           path = "android/app/build.gradle.kts"
           if os.path.exists(path):
-              with open(path, "r") as f:
+              with open(path, "r", encoding="utf-8") as f:
                   content = f.read()
 
-              # Zaključaj NDK verziju na predinstaliranu stabilnu verziju na trkaču
-              if "android {" in content and "ndkVersion" not in content:
-                  content = content.replace("android {", "android {\n    ndkVersion = \"27.0.12077973\"")
+              # Zaključavanje NDK verzije na predinstaliranu verziju
+              if "ndkVersion" not in content:
+                  content = re.sub(r"android\s*\{", "android {\n    ndkVersion = \"27.0.12077973\"", content, count=1)
 
-              # Isključujemo minifikaciju i shrink unutar buildTypes bloka
+              # Onemogućavanje R8 minifikacije i shrinkanja resursa
               content = content.replace("getByName(\"release\") {", "getByName(\"release\") {\n            isMinifyEnabled = false\n            isShrinkResources = false")
               content = content.replace("release {", "release {\n            isMinifyEnabled = false\n            isShrinkResources = false")
 
-              with open(path, "w") as f:
+              with open(path, "w", encoding="utf-8") as f:
                   f.write(content)
-              print("NDK verzija i R8 uspješno konfigurirani u build.gradle.kts")
+              print("Uspješno konfiguriran build.gradle.kts")
           '
 
           # 3. Postavljanje AndroidX oznaka
