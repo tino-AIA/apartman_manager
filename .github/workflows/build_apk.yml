@@ -40,7 +40,7 @@ jobs:
             sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 21/g' "$file"
           done
 
-          # 2. Onemogućavanje R8 minifikacije u build.gradle.kts
+          # 2. Zaključavanje NDK verzije i onemogućavanje R8 u build.gradle.kts
           python3 -c '
           import os
 
@@ -49,13 +49,17 @@ jobs:
               with open(path, "r") as f:
                   content = f.read()
 
+              # Zaključaj NDK verziju na predinstaliranu stabilnu verziju na trkaču
+              if "android {" in content and "ndkVersion" not in content:
+                  content = content.replace("android {", "android {\n    ndkVersion = \"27.0.12077973\"")
+
               # Isključujemo minifikaciju i shrink unutar buildTypes bloka
               content = content.replace("getByName(\"release\") {", "getByName(\"release\") {\n            isMinifyEnabled = false\n            isShrinkResources = false")
               content = content.replace("release {", "release {\n            isMinifyEnabled = false\n            isShrinkResources = false")
 
               with open(path, "w") as f:
                   f.write(content)
-              print("R8 uspješno isključen u build.gradle.kts")
+              print("NDK verzija i R8 uspješno konfigurirani u build.gradle.kts")
           '
 
           # 3. Postavljanje AndroidX oznaka
