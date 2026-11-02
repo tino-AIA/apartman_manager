@@ -97,7 +97,7 @@ class PodaciService extends ChangeNotifier {
           .map((e) => ApartmanModel.fromMap(Map<String, dynamic>.from(e as Map)))
           .toList();
 
-      // 3. Boravci - učitaj sve
+      // 3. Boravci
       var boravciQuery = _supabase.from('turisti_boravci').select();
       final boravciRes = user != null
           ? await boravciQuery.eq('user_id', user.id)
@@ -107,10 +107,10 @@ class PodaciService extends ChangeNotifier {
           .map<TuristBoravak>((e) => TuristBoravak.fromMap(Map<String, dynamic>.from(e as Map)))
           .toList();
 
-      // Sortiraj po postojećem broju računa (uzlazno)
+      // Sortiraj po broju računa
       _boravci.sort((a, b) => _izvuciBrojRacuna(a.racunBroj).compareTo(_izvuciBrojRacuna(b.racunBroj)));
 
-      // Automatski provjeri i zatvori rupe ako postoje (npr. ako lista kreće od 3 umjesto od 1)
+      // Automatski zatvori rupe ako ih ima
       await _zatvoriRupeURacunima();
     } catch (e) {
       debugPrint('Greška pri učitavanju iz Supabasea: $e');
@@ -120,16 +120,14 @@ class PodaciService extends ChangeNotifier {
     }
   }
 
-  /// Zatvara rupe i ujednačava sekvencu u bazi i listi (1/26, 2/26, 3/26...)
+  /// Zatvara rupe tako da računi idu kontinuirano 1, 2, 3, 4, 5...
   Future<void> _zatvoriRupeURacunima() async {
     if (_boravci.isEmpty) return;
 
-    // 1. Sortiraj postojeće boravke strogo po postojećem broju računa
     _boravci.sort((a, b) => _izvuciBrojRacuna(a.racunBroj).compareTo(_izvuciBrojRacuna(b.racunBroj)));
 
     bool biloIzmjena = false;
 
-    // 2. Provjeri svaki račun i zatvori rupe (npr. 3, 4, 5, 6, 7 postaju 1, 2, 3, 4, 5)
     for (int i = 0; i < _boravci.length; i++) {
       final staraGodina = _boravci[i].racunBroj.contains('/')
           ? _boravci[i].racunBroj.split('/')[1]
@@ -175,15 +173,9 @@ class PodaciService extends ChangeNotifier {
     }
   }
 
-  Future<void> renumerirajSveRacune() async {
-    await _zatvoriRupeURacunima();
-    notifyListeners();
-  }
-
-  /// Uvijek generira strogo sljedeći najveći broj računa (Max + 1)
-  String generirajSljedeciBrojRacuna(DateTime datum) {
-    final godina = DateTime.now().year;
-    final dvoznamenkastaGodina = (godina % 100).toString().padLeft(2, '0');
+  /// Novi račun UVIJEK dobiva maksimalni broj računa + 1 (ide na sam kraj)
+  String generirajSljedeciBrojRacuna() {
+    final dvoznamenkastaGodina = (DateTime.now().year % 100).toString().padLeft(2, '0');
     final suffix = '/$dvoznamenkastaGodina';
 
     int maxBroj = 0;
@@ -245,14 +237,14 @@ class PodaciService extends ChangeNotifier {
       mapaZaSpremanje['user_id'] = user.id;
     }
 
-    // Spremi u bazu
+    // 1. Spremi u Supabase
     await _supabase.from('turisti_boravci').upsert(mapaZaSpremanje);
 
-    // Dodaj u listu
+    // 2. Dodaj u listu
     _boravci.removeWhere((b) => b.id == boravak.id);
     _boravci.add(boravak);
 
-    // Poredaj po broju računa (novi ostaje na kraju s najvećim brojem)
+    // 3. Poredaj isključivo po broju računa (novi ostaje zadnji)
     _boravci.sort((a, b) => _izvuciBrojRacuna(a.racunBroj).compareTo(_izvuciBrojRacuna(b.racunBroj)));
     notifyListeners();
   }
@@ -275,7 +267,7 @@ class PodaciService extends ChangeNotifier {
     await _supabase.from('turisti_boravci').delete().eq('id', id.toString());
     _boravci.removeWhere((b) => b.id.toString() == id.toString());
 
-    // Automatski zatvori nastalu rupu (npr. ako je obrisan 1, 2 postaje 1, 3 postaje 2...)
+    // Automatsko zatvaranje rupa bez potrebe za magičnim gumbom
     await _zatvoriRupeURacunima();
     notifyListeners();
   }
