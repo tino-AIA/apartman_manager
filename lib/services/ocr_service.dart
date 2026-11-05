@@ -5,14 +5,31 @@ import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart
 import 'package:permission_handler/permission_handler.dart';
 import 'package:camera/camera.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
 
 class OcrDokumentRezultat {
+  final String prezime;
+  final String ime;
   final String punoIme;
+  final String spol; // "M" ili "Ž"
+  final DateTime? datumRodenja;
+  final String datumRodenjaTekst; // "dd.MM.yyyy."
+  final String drzavljanstvo; // ISO troznamenkasti kod npr. HRV, DEU, POL
+  final String vrstaDokumenta; // "Osobna iskaznica" ili "Putovnica"
   final String brojDokumenta;
+  final String drzavaIzdavanja;
 
   OcrDokumentRezultat({
+    this.prezime = '',
+    this.ime = '',
     required this.punoIme,
+    this.spol = '',
+    this.datumRodenja,
+    this.datumRodenjaTekst = '',
+    this.drzavljanstvo = '',
+    this.vrstaDokumenta = 'Osobna iskaznica',
     required this.brojDokumenta,
+    this.drzavaIzdavanja = '',
   });
 }
 
@@ -33,6 +50,7 @@ class OcrService {
             ListTile(
               leading: const Icon(Icons.camera_alt, color: Color(0xFF0D47A1)),
               title: const Text('Fotografiraj dokument (Kamera)'),
+              subtitle: const Text('Preporučeno za MRZ traku na poleđini ili dnu'),
               onTap: () => Navigator.pop(ctx, ImageSource.camera),
             ),
             ListTile(
@@ -65,12 +83,10 @@ class OcrService {
 
       final datoteka = File(odabranaSlika.path);
 
-      // Pokušaj 1: Normalna orijentacija
       var inputImage = InputImage.fromFile(datoteka);
       var recognizedText = await _textRecognizer.processImage(inputImage);
       var rezultat = _parsajPodatkeIzTeksta(recognizedText.text);
 
-      // Ako podaci nisu pronađeni, moguće je da je slika vertikalna/zarotirana u galeriji
       if (rezultat.punoIme.isEmpty || rezultat.brojDokumenta.isEmpty) {
         final rotacije = [
           InputImageRotation.rotation90deg,
@@ -168,64 +184,101 @@ class OcrService {
           .replaceAll('«', '<<')
           .replaceAll('{', '<')
           .replaceAll('(', '<')
+          .replaceAll('[', '<')
           .replaceAll('K<', '<<')
           .replaceAll('<K', '<<');
-
-      // Filtriraj administrativne riječi koje stvaraju šum
-      if (ociscena.contains('WYDAJ') ||
-          ociscena.contains('ORGAN') ||
-          ociscena.contains('PREZYD') ||
-          ociscena.contains('AUTHO') ||
-          ociscena.contains('DATUM') ||
-          ociscena.contains('EXPIR')) {
-        continue;
-      }
 
       if (ociscena.length >= 15) {
         sveOciscene.add(ociscena);
       }
     }
 
-    String punoIme = '';
-    String brojDokumenta = '';
-
     List<String> mrzLinije = sveOciscene.where((l) {
       return l.contains('<') ||
-          RegExp(r'^[A-Z0-9]{9}[0-9]').hasMatch(l) ||
+          RegExp(r'^[A-Z0-9]{8,10}[0-9]').hasMatch(l) ||
           l.startsWith('IO') ||
           l.startsWith('ID') ||
           l.startsWith('10') ||
           l.startsWith('1D') ||
           l.startsWith('I<') ||
           l.startsWith('AR') ||
-          l.startsWith('P<');
+          l.startsWith('P<') ||
+          l.startsWith('P');
     }).toList();
 
-    // 1. TD1 osobne iskaznice (3 linije)
-    if (mrzLinije.length >= 3) {
-      final zadnjeTri = mrzLinije.sublist(mrzLinije.length - 3);
-      final linija1 = zadnjeTri[0];
-      final linija3 = zadnjeTri[2];
+    String prezime = '';
+    String ime = '';
+    String punoIme = '';
+    String spol = '';
+    DateTime? datumRodenja;
+    String drzavljanstvo = '';
+    String vrstaDokumenta = 'Osobna iskaznica';
+    String brojDokumenta = '';
+    String drzavaIzdavanja = '';
 
-      punoIme = _izvuciImeIzMrzLinije(linija3);
-      brojDokumenta = _izvuciBrojIzTD1Linije(linija1);
+    // 1. TD1 Osobne iskaznice (3 linije x 30 znakova)
+    if (mrzLinije.length >= 3 && (mrzLinije.any((l) => l.startsWith('I') || l.startsWith('1') || l.startsWith('A')))) {
+      final zadnjeTri = mrzLinije.sublist(mrzLinije.length - 3);
+      final l1 = zadnjeTri[0];
+      final l2 = zadnjeTri[1];
+      final l3 = zadnjeTri[2];
+
+      vrstaDokumenta = 'Osobna iskaznica';
+
+      // Linija 1: Tip(2), DrzavaIzdavanja(3), BrojDokumenta(9)
+      if (l1.length >= 5) {
+        drzavaIzdavanja = _ocistiDrzavu(l1.substring(2, 5));
+      }
+      brojDokumenta = _izvuciBrojIzTD1Linije(l1);
+
+      // Linija 2: DatumRodenja (pozicija 0-5), Kontrolni(6), Spol (pozicija 7), Istek(8-13), Kontrolni(14), Drzavljanstvo(15-17)
+      if (l2.length >= 18) {
+        datumRodenja = _parsajDatumYYMMDD(l2.substring(0, 6));
+        spol = _parsajSpol(l2[7]);
+        drzavljanstvo = _ocistiDrzavu(l2.substring(15, 18));
+      }
+
+      // Linija 3: Prezime<<Ime<SrednjeIme
+      final imeTuple = _razdvojiImeIPrezimeIzMrz(l3);
+      prezime = imeTuple.$1;
+      ime = imeTuple.$2;
+      punoIme = '$prezime $ime'.trim();
     }
-    // 2. TD3 putovnice (2 linije)
+    // 2. TD3 Putovnice (2 linije x 44 znaka)
     else if (mrzLinije.length >= 2) {
       final zadnjeDvije = mrzLinije.sublist(mrzLinije.length - 2);
-      final linija1 = zadnjeDvije[0];
-      final linija2 = zadnjeDvije[1];
+      final l1 = zadnjeDvije[0];
+      final l2 = zadnjeDvije[1];
 
-      punoIme = _izvuciImeIzMrzLinije(linija1);
-      brojDokumenta = _izvuciBrojIzLinijePutovnice(linija2);
+      vrstaDokumenta = l1.startsWith('P') ? 'Putovnica' : 'Osobna iskaznica';
+
+      // Linija 1: Tip(2), Drzava(3), Prezime<<Ime<Srednje
+      if (l1.length >= 5) {
+        drzavaIzdavanja = _ocistiDrzavu(l1.substring(2, 5));
+      }
+      final imeTuple = _razdvojiImeIPrezimeIzMrz(l1);
+      prezime = imeTuple.$1;
+      ime = imeTuple.$2;
+      punoIme = '$prezime $ime'.trim();
+
+      // Linija 2: Broj(0-8), Kontrolni(9), Drzavljanstvo(10-12), DatumRodenja(13-18), Kontrolni(19), Spol(20)
+      brojDokumenta = _izvuciBrojIzLinijePutovnice(l2);
+      if (l2.length >= 21) {
+        drzavljanstvo = _ocistiDrzavu(l2.substring(10, 13));
+        datumRodenja = _parsajDatumYYMMDD(l2.substring(13, 19));
+        spol = _parsajSpol(l2[20]);
+      }
     }
-    // 3. Rezervno traženje
-    else {
+
+    // Rezervno traženje ako nešto nedostaje
+    if (punoIme.isEmpty) {
       for (final l in mrzLinije) {
         if (l.contains('<<')) {
-          final res = _izvuciImeIzMrzLinije(l);
-          if (res.isNotEmpty) {
-            punoIme = res;
+          final imeTuple = _razdvojiImeIPrezimeIzMrz(l);
+          if (imeTuple.$1.isNotEmpty || imeTuple.$2.isNotEmpty) {
+            prezime = imeTuple.$1;
+            ime = imeTuple.$2;
+            punoIme = '$prezime $ime'.trim();
             break;
           }
         }
@@ -234,34 +287,47 @@ class OcrService {
 
     if (brojDokumenta.isEmpty) {
       for (final l in sveOciscene) {
-        if (RegExp(r'^[A-Z0-9]{8,9}[0-9][A-Z]{3}').hasMatch(l)) {
-          brojDokumenta = l.substring(0, 9);
+        final match = RegExp(r'^[A-Z0-9]{8,9}[0-9]').firstMatch(l);
+        if (match != null) {
+          brojDokumenta = match.group(0)!.substring(0, 9);
           break;
         }
       }
     }
 
+    final df = DateFormat('dd.MM.yyyy.');
+    final datumRodenjaTekst = datumRodenja != null ? df.format(datumRodenja) : '';
+
     return OcrDokumentRezultat(
-      punoIme: punoIme,
+      prezime: prezime,
+      ime: ime,
+      punoIme: punoIme.isNotEmpty ? punoIme : '$prezime $ime'.trim(),
+      spol: spol,
+      datumRodenja: datumRodenja,
+      datumRodenjaTekst: datumRodenjaTekst,
+      drzavljanstvo: drzavljanstvo,
+      vrstaDokumenta: vrstaDokumenta,
       brojDokumenta: brojDokumenta,
+      drzavaIzdavanja: drzavaIzdavanja.isNotEmpty ? drzavaIzdavanja : drzavljanstvo,
     );
   }
 
-  String _izvuciImeIzMrzLinije(String linija) {
+  (String, String) _razdvojiImeIPrezimeIzMrz(String linija) {
     String radna = linija;
 
     if (radna.startsWith('P<') || radna.startsWith('P')) {
       radna = radna.replaceAll(RegExp(r'^P<?[A-Z]{3}'), '');
+    } else if (radna.startsWith('I<') || radna.startsWith('ID') || radna.startsWith('IO') || radna.startsWith('10')) {
+      radna = radna.replaceAll(RegExp(r'^(I<|ID|IO|10|1D)[A-Z<]{3}'), '');
     }
 
-    if (!radna.contains('<<')) return '';
+    if (!radna.contains('<<')) return ('', '');
 
     final dijelovi = radna.split('<<');
     if (dijelovi.length >= 2) {
       String prezime = dijelovi[0].replaceAll('<', ' ').trim();
 
-      String imenaRaw = dijelovi[1];
-      imenaRaw = imenaRaw
+      String imenaRaw = dijelovi[1]
           .replaceAll(RegExp(r'K<+$'), '')
           .replaceAll(RegExp(r'<+$'), '');
 
@@ -279,19 +345,10 @@ class OcrService {
         prezime = prezime.substring(0, prezime.length - 1);
       }
 
-      if (imena.endsWith('K') && imena.length > 3) {
-        if (imena.endsWith('AK') || imena.endsWith('EK')) {
-          imena = imena.substring(0, imena.length - 1);
-        }
-      }
-
-      if (prezime.isNotEmpty && imena.isNotEmpty) {
-        return '${_formatiraj(prezime)} ${_formatiraj(imena)}';
-      } else if (prezime.isNotEmpty) {
-        return _formatiraj(prezime);
-      }
+      return (_formatiraj(prezime), _formatiraj(imena));
     }
-    return '';
+
+    return ('', '');
   }
 
   String _izvuciBrojIzTD1Linije(String linija1) {
@@ -301,14 +358,10 @@ class OcrService {
         return nakonDrzave.substring(0, 9);
       }
     }
-
-    final match = RegExp(r'[A-Z0-9]{9}').firstMatch(
+    final match = RegExp(r'[A-Z0-9]{8,9}').firstMatch(
       linija1.replaceAll(RegExp(r'^(IO|ID|10|1D|I<|AR)[A-Z<]{3}'), ''),
     );
-    if (match != null) {
-      return match.group(0)!;
-    }
-    return '';
+    return match?.group(0) ?? '';
   }
 
   String _izvuciBrojIzLinijePutovnice(String linija2) {
@@ -317,18 +370,49 @@ class OcrService {
       return ociscena.substring(0, 9);
     }
     final match = RegExp(r'^[A-Z0-9]{8,9}').firstMatch(linija2);
-    if (match != null) {
-      return match.group(0)!;
+    return match?.group(0) ?? '';
+  }
+
+  DateTime? _parsajDatumYYMMDD(String yymmdd) {
+    if (yymmdd.length != 6) return null;
+    final yyStr = yymmdd.substring(0, 2);
+    final mmStr = yymmdd.substring(2, 4);
+    final ddStr = yymmdd.substring(4, 6);
+
+    int? yy = int.tryParse(yyStr);
+    int? mm = int.tryParse(mmStr);
+    int? dd = int.tryParse(ddStr);
+
+    if (yy == null || mm == null || dd == null) return null;
+    if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return null;
+
+    final trenutnaGodina = DateTime.now().year % 100;
+    // Ako je yy npr. 85 -> 1985; ako je 15 -> 2015
+    final punaGodina = (yy > trenutnaGodina) ? (1900 + yy) : (2000 + yy);
+
+    try {
+      return DateTime(punaGodina, mm, dd);
+    } catch (_) {
+      return null;
     }
+  }
+
+  String _parsajSpol(String char) {
+    final c = char.toUpperCase();
+    if (c == 'M') return 'M';
+    if (c == 'F' || c == 'W') return 'Ž';
     return '';
+  }
+
+  String _ocistiDrzavu(String raw) {
+    return raw.replaceAll('<', '').replaceAll(RegExp(r'[^A-Z]'), '').trim();
   }
 
   String _formatiraj(String tekst) {
     if (tekst.isEmpty) return '';
     return tekst.split(' ').map((r) {
       if (r.isEmpty) return '';
-      return r[0].toUpperCase() +
-          (r.length > 1 ? r.substring(1).toLowerCase() : '');
+      return r[0].toUpperCase() + (r.length > 1 ? r.substring(1).toLowerCase() : '');
     }).join(' ');
   }
 
@@ -372,7 +456,7 @@ class _KameraSkeniranjeScreenState extends State<_KameraSkeniranjeScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Postavite dokument u okvir'),
+        title: const Text('Postavite MRZ zonu u okvir'),
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
       ),
@@ -384,6 +468,7 @@ class _KameraSkeniranjeScreenState extends State<_KameraSkeniranjeScreen> {
             return Stack(
               children: [
                 Center(child: CameraPreview(_controller)),
+                // Vodilica okvira za osobnu ili putovnicu
                 Center(
                   child: Container(
                     width: size.width * 0.90,
@@ -391,6 +476,23 @@ class _KameraSkeniranjeScreenState extends State<_KameraSkeniranjeScreen> {
                     decoration: BoxDecoration(
                       border: Border.all(color: Colors.greenAccent, width: 2.5),
                       borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  bottom: 120,
+                  left: 20,
+                  right: 20,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text(
+                      'Usmjerite kameru na dno ili poleđinu s kodom (<<<)',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.white, fontSize: 13),
                     ),
                   ),
                 ),
@@ -410,8 +512,7 @@ class _KameraSkeniranjeScreenState extends State<_KameraSkeniranjeScreen> {
                           }
                         } catch (_) {}
                       },
-                      child: const Icon(Icons.camera_alt,
-                          color: Colors.black, size: 36),
+                      child: const Icon(Icons.camera_alt, color: Colors.black, size: 36),
                     ),
                   ),
                 ),
@@ -419,7 +520,8 @@ class _KameraSkeniranjeScreenState extends State<_KameraSkeniranjeScreen> {
             );
           } else {
             return const Center(
-                child: CircularProgressIndicator(color: Colors.white));
+              child: CircularProgressIndicator(color: Colors.white),
+            );
           }
         },
       ),
