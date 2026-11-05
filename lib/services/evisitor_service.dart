@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/turist_model.dart';
 import 'podaci_service.dart';
 
@@ -43,15 +44,32 @@ class EvisitorService {
     return lista;
   }
 
-  Future<bool> generirajIExportajCsv(
-    List<EvisitorKandidat> odabrani, {
-    String? zadaniNazivObjekta,
-    bool posaljiPrazanObjekt = false,
-  }) async {
+  Future<bool> generirajIExportajCsv(List<EvisitorKandidat> odabrani) async {
     if (odabrani.isEmpty) return false;
 
+    // 1. Dohvat postavki iz baze (vrijeme i objekt)
+    String checkInVrijeme = '14:00';
+    String checkOutVrijeme = '10:00';
+    String evisitorNazivObjekta = '';
+    bool evisitorPrazanObjekt = false;
+
+    try {
+      final supabase = Supabase.instance.client;
+      final user = supabase.auth.currentUser;
+      var query = supabase.from('postavke_vlasnik').select();
+      final res = user != null
+          ? await query.eq('user_id', user.id).maybeSingle()
+          : await query.limit(1).maybeSingle();
+
+      if (res != null) {
+        checkInVrijeme = res['check_in_vrijeme']?.toString() ?? '14:00';
+        checkOutVrijeme = res['check_out_vrijeme']?.toString() ?? '10:00';
+        evisitorNazivObjekta = res['evisitor_naziv_objekta']?.toString() ?? '';
+        evisitorPrazanObjekt = res['evisitor_prazan_objekt'] == true;
+      }
+    } catch (_) {}
+
     final dfDatum = DateFormat('dd.MM.yyyy');
-    final dfVrijeme = DateFormat('HH:mm');
 
     final List<String> csvRedci = [
       'Prezime;Ime;Spol;Drzavljanstvo;DatumRodenja;GradPrebivalista;VrstaIsprave;BrojIsprave;DatumDolaska;VrijemeDolaska;DatumOdlaska;VrijemeOdlaska;Objekt'
@@ -70,11 +88,11 @@ class EvisitorService {
           : (g.spol.toUpperCase().startsWith('Ž') || g.spol.toUpperCase().startsWith('F') ? 'Z' : '');
       final vrstaIsprave = _mapirajVrstuIsprave(g.vrstaDokumenta);
 
-      // Određivanje naziva objekta za eVisitor
+      // Određivanje vrijednosti stupca Objekt
       String objektZaCsv = '';
-      if (!posaljiPrazanObjekt) {
-        if (zadaniNazivObjekta != null && zadaniNazivObjekta.trim().isNotEmpty) {
-          objektZaCsv = zadaniNazivObjekta.trim();
+      if (!evisitorPrazanObjekt) {
+        if (evisitorNazivObjekta.trim().isNotEmpty) {
+          objektZaCsv = evisitorNazivObjekta.trim();
         } else {
           objektZaCsv = b.apartmanNaziv;
         }
@@ -90,9 +108,9 @@ class EvisitorService {
         vrstaIsprave,
         _ocistiCsvVrijednost(g.brojDokumenta),
         dfDatum.format(b.datumDolaska),
-        dfVrijeme.format(b.datumDolaska),
+        checkInVrijeme,
         dfDatum.format(b.datumOdlaska),
-        '10:00',
+        checkOutVrijeme,
         _ocistiCsvVrijednost(objektZaCsv),
       ].join(';');
 
