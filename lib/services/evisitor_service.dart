@@ -43,7 +43,11 @@ class EvisitorService {
     return lista;
   }
 
-  Future<bool> generirajIExportajCsv(List<EvisitorKandidat> odabrani) async {
+  Future<bool> generirajIExportajCsv(
+    List<EvisitorKandidat> odabrani, {
+    String? zadaniNazivObjekta,
+    bool posaljiPrazanObjekt = false,
+  }) async {
     if (odabrani.isEmpty) return false;
 
     final dfDatum = DateFormat('dd.MM.yyyy');
@@ -66,6 +70,16 @@ class EvisitorService {
           : (g.spol.toUpperCase().startsWith('Ž') || g.spol.toUpperCase().startsWith('F') ? 'Z' : '');
       final vrstaIsprave = _mapirajVrstuIsprave(g.vrstaDokumenta);
 
+      // Određivanje naziva objekta za eVisitor
+      String objektZaCsv = '';
+      if (!posaljiPrazanObjekt) {
+        if (zadaniNazivObjekta != null && zadaniNazivObjekta.trim().isNotEmpty) {
+          objektZaCsv = zadaniNazivObjekta.trim();
+        } else {
+          objektZaCsv = b.apartmanNaziv;
+        }
+      }
+
       final redak = [
         _ocistiCsvVrijednost(prezime),
         _ocistiCsvVrijednost(ime),
@@ -79,7 +93,7 @@ class EvisitorService {
         dfVrijeme.format(b.datumDolaska),
         dfDatum.format(b.datumOdlaska),
         '10:00',
-        _ocistiCsvVrijednost(b.apartmanNaziv),
+        _ocistiCsvVrijednost(objektZaCsv),
       ].join(';');
 
       csvRedci.add(redak);
