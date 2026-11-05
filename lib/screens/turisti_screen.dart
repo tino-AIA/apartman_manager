@@ -27,7 +27,9 @@ class _TuristiScreenState extends State<TuristiScreen> {
     super.dispose();
   }
 
-  void _osvjezi() => setState(() {});
+  void _osvjezi() {
+    if (mounted) setState(() {});
+  }
 
   void _potvrdiBrisanje(BuildContext context, TuristBoravak b) {
     showDialog(
@@ -62,12 +64,26 @@ class _TuristiScreenState extends State<TuristiScreen> {
   @override
   Widget build(BuildContext context) {
     final df = DateFormat('dd.MM.');
-    final boravci = _service.boravci;
+
+    // Sortiraj strogo po rednom broju računa (1, 2, 3...)
+    final boravci = List<TuristBoravak>.from(_service.boravci);
+    boravci.sort((a, b) {
+      final brA = int.tryParse(a.racunBroj.split('/').first) ?? 0;
+      final brB = int.tryParse(b.racunBroj.split('/').first) ?? 0;
+      return brA.compareTo(brB);
+    });
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Popis turista'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Osvježi podatke',
+            onPressed: () => _service.ucitajIzSupabase(),
+          ),
+        ],
       ),
       body: boravci.isEmpty
           ? const Center(
@@ -99,7 +115,7 @@ class _TuristiScreenState extends State<TuristiScreen> {
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                   subtitle: Text(
-                    '${t.apartmanNaziv}\n${df.format(t.datumDolaska)} - ${df.format(t.datumOdlaska)} (${t.brojDana} noći, ${t.brojOsoba} os.) • ${t.nacinPlacanja}',
+                    '${t.apartmanNaziv}\n${df.format(t.datumDolaska)} - ${df.format(t.datumOdlaska)} (${t.brojDana} noći, ${t.brojOsoba} os.) •${t.nacinPlacanja}',
                   ),
                   isThreeLine: true,
                   trailing: Row(
@@ -134,52 +150,3 @@ class _TuristiScreenState extends State<TuristiScreen> {
                               context,
                               MaterialPageRoute(
                                 builder: (_) => NoviTuristScreen(postojeci: t),
-                              ),
-                            );
-                          } else if (val == 'obrisi') {
-                            _potvrdiBrisanje(context, t);
-                          }
-                        },
-                        itemBuilder: (_) => [
-                          const PopupMenuItem(
-                            value: 'uredi',
-                            child: Row(
-                              children: [
-                                Icon(Icons.edit, size: 18, color: Colors.blue),
-                                SizedBox(width: 8),
-                                Text('Uredi'),
-                              ],
-                            ),
-                          ),
-                          const PopupMenuItem(
-                            value: 'obrisi',
-                            child: Row(
-                              children: [
-                                Icon(Icons.delete, size: 18, color: Colors.red),
-                                SizedBox(width: 8),
-                                Text('Obriši', style: TextStyle(color: Colors.red)),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (ctx) => const NoviTuristScreen(),
-            ),
-          );
-        },
-        icon: const Icon(Icons.person_add),
-        label: const Text('Novi turist'),
-      ),
-    );
-  }
-}
