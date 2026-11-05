@@ -52,13 +52,13 @@ class OcrService {
             ListTile(
               leading: const Icon(Icons.camera_alt, color: Color(0xFF0D47A1)),
               title: const Text('Fotografiraj dokument (Kamera)'),
-              subtitle: const Text('MRZ kod ili prednja strana isprave'),
+              subtitle: const Text('MRZ traka (<<<) ili prednja strana isprave'),
               onTap: () => Navigator.pop(ctx, ImageSource.camera),
             ),
             ListTile(
               leading: const Icon(Icons.photo_library, color: Colors.green),
               title: const Text('Učitaj sliku iz galerije'),
-              subtitle: const Text('Pasoš, osobna iskaznica, vozačka dozvola'),
+              subtitle: const Text('Putovnica, osobna iskaznica, boravišna dozvola'),
               onTap: () => Navigator.pop(ctx, ImageSource.gallery),
             ),
           ],
@@ -86,16 +86,20 @@ class OcrService {
 
       final datoteka = File(odabranaSlika.path);
 
-      // 1. Prolaz na izvornoj slici
-      var inputImage = InputImage.fromFile(datoteka);
-      var recognizedText = await _textRecognizer.processImage(inputImage);
-      var rezultat = _obradiPrepoznatiTekst(recognizedText);
+      // 1. Pokušaj s izvornom slikom
+      final inputImage = InputImage.fromFile(datoteka);
+      final recognizedText = await _textRecognizer.processImage(inputImage);
+      final rezultat = _obradiPrepoznatiTekst(recognizedText);
 
       if (rezultat != null && rezultat.punoIme.isNotEmpty) {
         return rezultat;
       }
 
-      // 2. Ako nije prepoznato (npr. slika je rotirana 90 stupnjeva), provjeri rotacije
+      // 2. Ako nije prepoznato, provjeri rotacije za vertikalne i okrenute slike
+      final decodedImage = await decodeImageFromList(await datoteka.readAsBytes());
+      final width = decodedImage.width.toDouble();
+      final height = decodedImage.height.toDouble();
+
       final rotacije = [
         InputImageRotation.rotation90deg,
         InputImageRotation.rotation270deg,
@@ -104,16 +108,18 @@ class OcrService {
 
       for (final rot in rotacije) {
         try {
-          final rotInput = InputImage.fromFilePath(datoteka.path);
-          // Pokušaj s rotiranim metapodacima
           final metadata = InputImageMetadata(
-            size: const Size(1920, 1080),
+            size: Size(width, height),
             rotation: rot,
             format: InputImageFormat.nv21,
-            bytesPerRow: 1920,
+            bytesPerRow: decodedImage.width,
           );
-          final rotiraniResult = await _textRecognizer.processImage(rotInput);
-          final r = _obradiPrepoznatiTekst(rotiraniResult);
+          final rotiraniInput = InputImage.fromBytes(
+            bytes: await datoteka.readAsBytes(),
+            metadata: metadata,
+          );
+          final rotText = await _textRecognizer.processImage(rotiraniInput);
+          final r = _obradiPrepoznatiTekst(rotText);
           if (r != null && r.punoIme.isNotEmpty) {
             return r;
           }
@@ -124,7 +130,7 @@ class OcrService {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Greška pri obradi slike: $e')),
+          SnackBar(content: Text('Greška pri OCR obradi: $e')),
         );
       }
       return null;
@@ -195,7 +201,7 @@ class OcrService {
       return mrz;
     }
 
-    // Drugi prioritet: Strukturirani vizualni parser
+    // Drugi prioritet: Vizualni parser prednje strane
     return _parsajVizualno(sveLinije, recognizedText.text);
   }
 
@@ -225,10 +231,10 @@ class OcrService {
 
     if (mrzKandidati.isEmpty) return null;
 
-    // TD3 Putovnica (2 linije, dužina cca 44 znaka)
+    // TD3 Putovnica (2 linije, cca 44 znaka)
     for (int i = 0; i < mrzKandidati.length; i++) {
       final l1 = mrzKandidati[i];
-      if ((l1.startsWith('P<') || l1.startsWith('P')) && l1.length >= 30) {
+      if ((l1.startsWith('P<') || l1.startsWith('P')) && l1.length >= 28) {
         String l2 = '';
         if (i + 1 < mrzKandidati.length) {
           l2 = mrzKandidati[i + 1];
@@ -261,7 +267,7 @@ class OcrService {
       }
     }
 
-    // TD1 Lična karta (3 linije, dužina cca 30 znakova)
+    // TD1 Osobna iskaznica (3 linije, cca 30 znakova)
     if (mrzKandidati.length >= 3) {
       for (int i = 0; i <= mrzKandidati.length - 3; i++) {
         final l1 = mrzKandidati[i];
@@ -330,67 +336,55 @@ class OcrService {
       drzavljanstvo = textGornji.contains('RUS') ? 'RUS' : 'DEU';
     }
 
-    // 2. Prepoznavanje imena i prezimena po linijama
+    // 2. Prepoznavanje po linijama s ispravnim RegExp bez (?i)
+    final prezimePattern = RegExp(
+      r'\b(PRIEZVISKO|NAZWISKO|PŘÍJMENÍ|PRIJMENI|SURNAME|NAMEN)\b|\b1[\.\s]',
+      caseSensitive: false,
+    );
+    final imePattern = RegExp(
+      r'\b(GIVEN\s*NAMES?|MENO|IMIONA|JMÉNO|JMENO|FORENAMES|VORNAMEN)\b|\b2[\.\s]',
+      caseSensitive: false,
+    );
+    final brojPattern = RegExp(
+      r'\b(ČÍSLO|CISLO|DOCUMENT\s*NO|DOKUMENTU|CARD\s*NO)\b|\b5[\.\s]',
+      caseSensitive: false,
+    );
+
     for (int i = 0; i < linije.length; i++) {
       final l = linije[i].trim();
       final u = l.toUpperCase();
 
-      // Prezime
-      if (prezime.isEmpty) {
-        if (u.contains('PRIEZVISKO') ||
-            u.contains('NAZWISKO') ||
-            u.contains('PŘÍJMENÍ') ||
-            u.contains('SURNAME') ||
-            u == 'NAMEN' ||
-            u.startsWith('1.') ||
-            u.startsWith('1 ')) {
-          String s = l.replaceAll(RegExp(r'(?i)priezvisko|nazwisko|příjmení|surname|namen|\b1[\.\s]|\/'), '').trim();
-          if (s.isEmpty && i + 1 < linije.length) {
-            s = linije[i + 1].trim();
-          }
-          if (s.isNotEmpty && !_jeOznaka(s)) {
-            prezime = _ocistiImeTekst(s);
-          }
+      // Traženje prezimena
+      if (prezime.isEmpty && prezimePattern.hasMatch(l)) {
+        String s = l.replaceAll(prezimePattern, '').replaceAll('/', '').trim();
+        if (s.isEmpty && i + 1 < linije.length) {
+          s = linije[i + 1].trim();
+        }
+        if (s.isNotEmpty && !_jeOznaka(s)) {
+          prezime = _ocistiImeTekst(s);
         }
       }
 
-      // Ime
-      if (ime.isEmpty) {
-        if (u.contains('MENO') ||
-            u.contains('IMIONA') ||
-            u.contains('JMÉNO') ||
-            u.contains('GIVEN') ||
-            u.contains('FORENAMES') ||
-            u == 'VORNAMEN' ||
-            u.startsWith('2.') ||
-            u.startsWith('2 ')) {
-          String s = l.replaceAll(RegExp(r'(?i)given\s*names?|meno|imiona|jméno|forenames|vornamen|\b2[\.\s]|\/'), '').trim();
-          if (s.isEmpty && i + 1 < linije.length) {
-            s = linije[i + 1].trim();
-          }
-          if (s.isNotEmpty && !_jeOznaka(s)) {
-            ime = _ocistiImeTekst(s);
-          }
+      // Traženje imena
+      if (ime.isEmpty && imePattern.hasMatch(l)) {
+        String s = l.replaceAll(imePattern, '').replaceAll('/', '').trim();
+        if (s.isEmpty && i + 1 < linije.length) {
+          s = linije[i + 1].trim();
+        }
+        if (s.isNotEmpty && !_jeOznaka(s)) {
+          ime = _ocistiImeTekst(s);
         }
       }
 
-      // Broj isprave
-      if (brojDokumenta.isEmpty) {
-        if (u.contains('ČÍSLO') ||
-            u.contains('CISLO') ||
-            u.contains('DOCUMENT NO') ||
-            u.contains('DOKUMENTU') ||
-            u.contains('CARD NO') ||
-            u.startsWith('5.') ||
-            u.startsWith('5 ')) {
-          final m = RegExp(r'[A-Z0-9]{2,4}\s?[0-9]{5,8}').firstMatch(u);
-          if (m != null) {
-            brojDokumenta = m.group(0)!.replaceAll(' ', '');
-          } else if (i + 1 < linije.length) {
-            final sljedeca = linije[i + 1].trim().replaceAll(' ', '');
-            if (RegExp(r'^[A-Z0-9]{6,10}$').hasMatch(sljedeca)) {
-              brojDokumenta = sljedeca;
-            }
+      // Traženje broja isprave
+      if (brojDokumenta.isEmpty && brojPattern.hasMatch(l)) {
+        final m = RegExp(r'[A-Z0-9]{2,4}\s?[0-9]{5,8}').firstMatch(u);
+        if (m != null) {
+          brojDokumenta = m.group(0)!.replaceAll(' ', '');
+        } else if (i + 1 < linije.length) {
+          final sljedeca = linije[i + 1].trim().replaceAll(' ', '');
+          if (RegExp(r'^[A-Z0-9]{6,10}$').hasMatch(sljedeca)) {
+            brojDokumenta = sljedeca;
           }
         }
       }
@@ -398,8 +392,8 @@ class OcrService {
 
     // Rezervno traženje broja dokumenta (npr. MM261502, MM234827, DIC424993, 215361650, 42377229, U4887618, 035747)
     if (brojDokumenta.isEmpty) {
-      final docMatch = RegExp(r'\b([A-Z]{1,3}\s?[0-9]{6,8}|[0-9]{8,10}|[A-Z0-9]{8,10})\b').allMatches(puniTekst);
-      for (var dm in docMatch) {
+      final docMatches = RegExp(r'\b([A-Z]{1,3}\s?[0-9]{6,8}|[0-9]{8,10}|[A-Z0-9]{8,10})\b').allMatches(puniTekst);
+      for (var dm in docMatches) {
         final kandidat = dm.group(0)!.replaceAll(' ', '');
         if (!kandidat.startsWith('19') && !kandidat.startsWith('20') && kandidat.length >= 6) {
           brojDokumenta = kandidat;
@@ -423,7 +417,7 @@ class OcrService {
       }
     }
 
-    // Ako ni prezime ni ime nisu nađeni strukturalno, pokušaj naći prve dvije kapitalizirane riječi
+    // Rezervno spajanje imena ako linije nisu bile označene etiketom
     if (prezime.isEmpty && ime.isEmpty) {
       for (var l in linije) {
         if (l.contains(' ') && RegExp(r'^[A-ZČĆŽŠĐÁÉÍÓÚÝČĎĚŇŘŠŤŽŮÄÖÜ\s\-]{5,30}$').hasMatch(l)) {
@@ -498,6 +492,10 @@ class OcrService {
 
       prezime = prezime.replaceAll(RegExp(r'[^A-ZČĆŽŠĐ ]'), '').trim();
       imena = imena.replaceAll(RegExp(r'[^A-ZČĆŽŠĐ ]'), '').trim();
+
+      if (prezime.endsWith('K') && prezime.length > 3) {
+        prezime = prezime.substring(0, prezime.length - 1);
+      }
 
       return (_formatiraj(prezime), _formatiraj(imena));
     }
