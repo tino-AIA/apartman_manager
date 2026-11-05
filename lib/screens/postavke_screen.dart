@@ -25,6 +25,12 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
         'Obveznik nije u sustavu PDV-a, sukladno odredbama čl. 90. st. 2. Zakona o PDV-u. PDV nije obračunat.',
   );
 
+  // eVisitor i vremena
+  TimeOfDay _checkInVrijeme = const TimeOfDay(hour: 14, minute: 0);
+  TimeOfDay _checkOutVrijeme = const TimeOfDay(hour: 10, minute: 0);
+  final _evisitorNazivCtrl = TextEditingController();
+  bool _evisitorPrazanObjekt = false;
+
   List<SmjestajnaJedinica> _jedinice = [];
   bool _ucitavanje = true;
   bool _spremam = false;
@@ -46,6 +52,7 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
     _telefonCtrl.dispose();
     _emailCtrl.dispose();
     _pdvNapomenaCtrl.dispose();
+    _evisitorNazivCtrl.dispose();
     super.dispose();
   }
 
@@ -72,6 +79,29 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
         if (vlasnikRes['pdv_napomena'] != null &&
             vlasnikRes['pdv_napomena'].toString().isNotEmpty) {
           _pdvNapomenaCtrl.text = vlasnikRes['pdv_napomena'].toString();
+        }
+
+        // eVisitor polja
+        _evisitorNazivCtrl.text = vlasnikRes['evisitor_naziv_objekta']?.toString() ?? '';
+        _evisitorPrazanObjekt = vlasnikRes['evisitor_prazan_objekt'] == true;
+
+        final inStr = vlasnikRes['check_in_vrijeme']?.toString() ?? '14:00';
+        final outStr = vlasnikRes['check_out_vrijeme']?.toString() ?? '10:00';
+
+        final inParts = inStr.split(':');
+        if (inParts.length == 2) {
+          _checkInVrijeme = TimeOfDay(
+            hour: int.tryParse(inParts[0]) ?? 14,
+            minute: int.tryParse(inParts[1]) ?? 0,
+          );
+        }
+
+        final outParts = outStr.split(':');
+        if (outParts.length == 2) {
+          _checkOutVrijeme = TimeOfDay(
+            hour: int.tryParse(outParts[0]) ?? 10,
+            minute: int.tryParse(outParts[1]) ?? 0,
+          );
         }
       }
 
@@ -157,6 +187,28 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
           zavrsniDan: 31,
           cijenaPoOsobiNoc: 30.0),
     ];
+  }
+
+  String _formatirajVrijeme(TimeOfDay tod) {
+    final h = tod.hour.toString().padLeft(2, '0');
+    final m = tod.minute.toString().padLeft(2, '0');
+    return '$h:$m';
+  }
+
+  Future<void> _odaberiVrijeme({required bool isCheckIn}) async {
+    final odabrano = await showTimePicker(
+      context: context,
+      initialTime: isCheckIn ? _checkInVrijeme : _checkOutVrijeme,
+    );
+    if (odabrano != null) {
+      setState(() {
+        if (isCheckIn) {
+          _checkInVrijeme = odabrano;
+        } else {
+          _checkOutVrijeme = odabrano;
+        }
+      });
+    }
   }
 
   void _otvoriDijalogZaJedinicu({SmjestajnaJedinica? postojeca, int? index}) {
@@ -372,7 +424,6 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
     final user = supabase.auth.currentUser;
 
     try {
-      // 1. Spremanje postavki vlasnika vezanih uz aktivnog korisnika
       final podaciVlasnika = <String, dynamic>{
         'naziv_objekta': _nazivObjektaCtrl.text.trim(),
         'ime_prezime': _imePrezimeCtrl.text.trim(),
@@ -382,6 +433,10 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
         'telefon': _telefonCtrl.text.trim(),
         'email': _emailCtrl.text.trim(),
         'pdv_napomena': _pdvNapomenaCtrl.text.trim(),
+        'check_in_vrijeme': _formatirajVrijeme(_checkInVrijeme),
+        'check_out_vrijeme': _formatirajVrijeme(_checkOutVrijeme),
+        'evisitor_naziv_objekta': _evisitorNazivCtrl.text.trim(),
+        'evisitor_prazan_objekt': _evisitorPrazanObjekt,
       };
 
       if (user != null) {
@@ -401,7 +456,6 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
         _postojeciZapisId = upsertRes['id'].toString();
       }
 
-      // 2. Brisanje starih jedinica i upis novih za prijavljenog korisnika
       var deleteQuery = supabase.from('smjestajne_jedinice').delete();
       if (user != null) {
         await deleteQuery.eq('user_id', user.id);
@@ -453,7 +507,7 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Svi podaci i smještajne jedinice uspješno su spremljeni u bazu!'),
+            content: Text('Svi podaci, postavke vremena i jedinice uspješno su spremljeni!'),
             backgroundColor: Colors.green,
           ),
         );
@@ -575,7 +629,83 @@ class _PostavkeScreenState extends State<PostavkeScreen> {
                   labelText: 'Napomena o PDV-u na računima',
                   border: OutlineInputBorder()),
             ),
+
+            const Divider(height: 36, thickness: 1.5),
+
+            // eVisitor postavke i Vrijeme Check-in / Check-out
+            const Text(
+              'eVisitor postavke i Vrijeme boravka',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF0D47A1),
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                    ),
+                    icon: const Icon(Icons.login, color: Colors.green),
+                    label: Text(
+                      'Check-in:\n${_formatirajVrijeme(_checkInVrijeme)}',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    onPressed: () => _odaberiVrijeme(isCheckIn: true),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                    ),
+                    icon: const Icon(Icons.logout, color: Colors.orange),
+                    label: Text(
+                      'Check-out:\n${_formatirajVrijeme(_checkOutVrijeme)}',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    onPressed: () => _odaberiVrijeme(isCheckIn: false),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Ostavi stupac "Objekt" prazan u CSV-u'),
+              subtitle: const Text(
+                'Uključite ako u eVisitoru nemate podjelu na sobe/apartmane nego jedinstvenu prijavu.',
+                style: TextStyle(fontSize: 12),
+              ),
+              value: _evisitorPrazanObjekt,
+              onChanged: (val) {
+                setState(() => _evisitorPrazanObjekt = val);
+              },
+            ),
+
+            if (!_evisitorPrazanObjekt) ...[
+              const SizedBox(height: 8),
+              TextField(
+                controller: _evisitorNazivCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Službeni eVisitor naziv / šifra objekta (opcionalno)',
+                  helperText:
+                      'Ako ostavite prazno, koristiti će se interni naziv apartmana (npr. Cosy, Sunny...).',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+
             const Divider(height: 40, thickness: 1.5),
+
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
