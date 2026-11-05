@@ -4,24 +4,53 @@ class GostStavka {
   String prezimeIme;
   String brojDokumenta;
   bool nositeljRacuna;
+  String spol;
+  String datumRodenja;
+  String drzavljanstvo;
+  String vrstaDokumenta;
+  String gradPrebivalista;
+  bool evisitorPrijavljen;
+  DateTime? evisitorVrijemePrijave;
 
   GostStavka({
     required this.prezimeIme,
     this.brojDokumenta = '',
     this.nositeljRacuna = false,
+    this.spol = '',
+    this.datumRodenja = '',
+    this.drzavljanstvo = '',
+    this.vrstaDokumenta = 'Osobna iskaznica',
+    this.gradPrebivalista = '',
+    this.evisitorPrijavljen = false,
+    this.evisitorVrijemePrijave,
   });
 
   Map<String, dynamic> toMap() => {
         'prezime_ime': prezimeIme,
         'broj_dokumenta': brojDokumenta,
         'nositelj_racuna': nositeljRacuna,
+        'spol': spol,
+        'datum_rodenja': datumRodenja,
+        'drzavljanstvo': drzavljanstvo,
+        'vrsta_dokumenta': vrstaDokumenta,
+        'grad_prebivalista': gradPrebivalista,
+        'evisitor_prijavljen': evisitorPrijavljen,
+        'evisitor_vrijeme_prijave': evisitorVrijemePrijave?.toIso8601String(),
       };
 
   factory GostStavka.fromMap(Map<String, dynamic> map) {
+    final vPrijava = map['evisitor_vrijeme_prijave']?.toString();
     return GostStavka(
       prezimeIme: (map['prezime_ime'] ?? map['prezimeIme'])?.toString() ?? '',
       brojDokumenta: (map['broj_dokumenta'] ?? map['brojDokumenta'])?.toString() ?? '',
       nositeljRacuna: map['nositelj_racuna'] == true || map['nositeljRacuna'] == true,
+      spol: (map['spol'])?.toString() ?? '',
+      datumRodenja: (map['datum_rodenja'] ?? map['datumRodenja'])?.toString() ?? '',
+      drzavljanstvo: (map['drzavljanstvo'])?.toString() ?? '',
+      vrstaDokumenta: (map['vrsta_dokumenta'] ?? map['vrstaDokumenta'])?.toString() ?? 'Osobna iskaznica',
+      gradPrebivalista: (map['grad_prebivalista'] ?? map['gradPrebivalista'])?.toString() ?? '',
+      evisitorPrijavljen: map['evisitor_prijavljen'] == true,
+      evisitorVrijemePrijave: vPrijava != null ? DateTime.tryParse(vPrijava) : null,
     );
   }
 }
