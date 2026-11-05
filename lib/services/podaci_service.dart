@@ -97,20 +97,17 @@ class PodaciService extends ChangeNotifier {
           .map((e) => ApartmanModel.fromMap(Map<String, dynamic>.from(e as Map)))
           .toList();
 
-      // 3. Boravci
+      // 3. Boravci - učitaj strogo po created_at uzlazno (vrijeme unosa)
       var boravciQuery = _supabase.from('turisti_boravci').select();
       final boravciRes = user != null
-          ? await boravciQuery.eq('user_id', user.id)
-          : await boravciQuery;
+          ? await boravciQuery.eq('user_id', user.id).order('created_at', ascending: true)
+          : await boravciQuery.order('created_at', ascending: true);
 
       _boravci = (boravciRes as List<dynamic>)
           .map<TuristBoravak>((e) => TuristBoravak.fromMap(Map<String, dynamic>.from(e as Map)))
           .toList();
 
-      // Sortiraj po broju računa
-      _boravci.sort((a, b) => _izvuciBrojRacuna(a.racunBroj).compareTo(_izvuciBrojRacuna(b.racunBroj)));
-
-      // Automatski zatvori rupe ako ih ima
+      // Automatski zatvori rupe ako ih ima, poštujući redoslijed nastanka
       await _zatvoriRupeURacunima();
     } catch (e) {
       debugPrint('Greška pri učitavanju iz Supabasea: $e');
@@ -120,18 +117,24 @@ class PodaciService extends ChangeNotifier {
     }
   }
 
-  /// Zatvara rupe tako da računi idu kontinuirano 1, 2, 3, 4, 5...
+  /// Zatvara rupe tako da računi idu kontinuirano 1, 2, 3, 4, 5... prateći redoslijed nastanka
   Future<void> _zatvoriRupeURacunima() async {
     if (_boravci.isEmpty) return;
 
-    _boravci.sort((a, b) => _izvuciBrojRacuna(a.racunBroj).compareTo(_izvuciBrojRacuna(b.racunBroj)));
+    // Sortiraj strogo po vremenu unosa (createdAt) ili trenutnom broju računa
+    _boravci.sort((a, b) {
+      final cComp = a.createdAt.compareTo(b.createdAt);
+      if (cComp != 0) return cComp;
+      return _izvuciBrojRacuna(a.racunBroj).compareTo(_izvuciBrojRacuna(b.racunBroj));
+    });
 
+    final dvoznamenkastaGodina = (DateTime.now().year % 100).toString().padLeft(2, '0');
     bool biloIzmjena = false;
 
     for (int i = 0; i < _boravci.length; i++) {
       final staraGodina = _boravci[i].racunBroj.contains('/')
           ? _boravci[i].racunBroj.split('/')[1]
-          : ((_boravci[i].datumDolaska.year % 100).toString().padLeft(2, '0'));
+          : dvoznamenkastaGodina;
 
       final noviBroj = '${i + 1}/$staraGodina';
 
@@ -153,6 +156,7 @@ class PodaciService extends ChangeNotifier {
           nacinPlacanja: stari.nacinPlacanja,
           racunBroj: noviBroj,
           racunIspisan: stari.racunIspisan,
+          createdAt: stari.createdAt,
         );
 
         _boravci[i] = azurirani;
@@ -230,7 +234,6 @@ class PodaciService extends ChangeNotifier {
 
   Future<void> dodajBoravak(TuristBoravak boravak) async {
     final mapaZaSpremanje = boravak.toMap();
-    mapaZaSpremanje['created_at'] = DateTime.now().toIso8601String();
 
     final user = _supabase.auth.currentUser;
     if (user != null) {
@@ -267,7 +270,7 @@ class PodaciService extends ChangeNotifier {
     await _supabase.from('turisti_boravci').delete().eq('id', id.toString());
     _boravci.removeWhere((b) => b.id.toString() == id.toString());
 
-    // Automatsko zatvaranje rupa bez potrebe za magičnim gumbom
+    // Automatsko zatvaranje rupa bez miješanja redoslijeda
     await _zatvoriRupeURacunima();
     notifyListeners();
   }
