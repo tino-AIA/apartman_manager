@@ -31,10 +31,9 @@ jobs:
 
       - name: Podešavanje Android SDK, Gradle i R8
         run: |
-          # 1. Popravak Gradle Wrapper URL-a na stabilan mirror (rješava grešku 504)
+          # 1. Postavljanje točne verzije 9.3.1-bin.zip sa services.gradle.org mirrora
           if [ -f android/gradle/wrapper/gradle-wrapper.properties ]; then
-            sed -i 's|https\\://github.com/gradle/gradle-distributions/releases/download/.*|https\\://services.gradle.org/distributions/gradle-8.10.2-bin.zip|g' android/gradle/wrapper/gradle-wrapper.properties
-            sed -i 's|distributionUrl=.*|distributionUrl=https\\://services.gradle.org/distributions/gradle-8.10.2-bin.zip|g' android/gradle/wrapper/gradle-wrapper.properties
+            sed -i 's|distributionUrl=.*|distributionUrl=https\\://services.gradle.org/distributions/gradle-9.3.1-bin.zip|g' android/gradle/wrapper/gradle-wrapper.properties
           fi
 
           # 2. Podešavanje minSdkVersion na 21 za ML Kit kameru
