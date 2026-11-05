@@ -170,26 +170,34 @@ class _EvisitorScreenState extends State<EvisitorScreen> {
                     },
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: ElevatedButton.icon(
-                    onPressed: _ucitavanje || _odabraniIndeksi.isEmpty ? null : _pokreniExport,
-                    icon: _ucitavanje
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                          )
-                        : const Icon(Icons.file_download),
-                    label: Text(
-                      _ucitavanje
-                          ? 'GENERIRANJE...'
-                          : 'IZVEZI CSV ZA ODABRANE (${_odabraniIndeksi.length})',
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      minimumSize: const Size.fromHeight(48),
-                      backgroundColor: const Color(0xFF0D47A1),
-                      foregroundColor: Colors.white,
+                // Dugme osigurano sa SafeArea i dodatnim paddingom iznad sistemske trake
+                SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                    child: ElevatedButton.icon(
+                      onPressed: _ucitavanje || _odabraniIndeksi.isEmpty ? null : _pokreniExport,
+                      icon: _ucitavanje
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                            )
+                          : const Icon(Icons.file_download),
+                      label: Text(
+                        _ucitavanje
+                            ? 'GENERIRANJE...'
+                            : 'IZVEZI CSV ZA ODABRANE (${_odabraniIndeksi.length})',
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(50),
+                        backgroundColor: const Color(0xFF0D47A1),
+                        foregroundColor: Colors.white,
+                        elevation: 3,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
                     ),
                   ),
                 ),
