@@ -40,6 +40,7 @@ class TuristBoravak {
   final String nacinPlacanja;
   final String racunBroj;
   final bool racunIspisan;
+  final DateTime createdAt;
 
   TuristBoravak({
     required this.id,
@@ -55,12 +56,15 @@ class TuristBoravak {
     required this.nacinPlacanja,
     required this.racunBroj,
     this.racunIspisan = false,
-  }) : gosti = gosti ?? [GostStavka(prezimeIme: prezimeIme, nositeljRacuna: true)];
+    DateTime? createdAt,
+  })  : gosti = gosti ?? [GostStavka(prezimeIme: prezimeIme, nositeljRacuna: true)],
+        createdAt = createdAt ?? DateTime.now();
 
   Map<String, dynamic> toMap() {
     final dDolaska = datumDolaska.toIso8601String().split('T').first;
     final dOdlaska = datumOdlaska.toIso8601String().split('T').first;
     final gostiJson = gosti.map((g) => g.toMap()).toList();
+    final cAtIso = createdAt.toIso8601String();
 
     return {
       'id': id,
@@ -77,6 +81,7 @@ class TuristBoravak {
       'nacinPlacanja': nacinPlacanja,
       'racunBroj': racunBroj,
       'racunIspisan': racunIspisan,
+      'createdAt': cAtIso,
 
       // snake_case nazivi (za bazu s NOT NULL ograničenjima)
       'apartman_naziv': apartmanNaziv,
@@ -90,6 +95,7 @@ class TuristBoravak {
       'nacin_placanja': nacinPlacanja,
       'racun_broj': racunBroj,
       'racun_ispisan': racunIspisan,
+      'created_at': cAtIso,
     };
   }
 
@@ -108,6 +114,8 @@ class TuristBoravak {
 
     final rBroj = (map['racunBroj'] ?? map['racun_broj'])?.toString() ?? '';
 
+    final cAt = (map['created_at'] ?? map['createdAt'])?.toString();
+
     return TuristBoravak(
       id: map['id']?.toString() ?? '',
       apartmanNaziv: (map['apartmanNaziv'] ?? map['apartman_naziv'] ?? map['apartman'])?.toString() ?? '',
@@ -124,6 +132,7 @@ class TuristBoravak {
       nacinPlacanja: (map['nacinPlacanja'] ?? map['nacin_placanja'])?.toString() ?? 'Gotovina / Cash',
       racunBroj: rBroj,
       racunIspisan: map['racunIspisan'] == true || map['racun_ispisan'] == true,
+      createdAt: cAt != null ? (DateTime.tryParse(cAt) ?? DateTime.now()) : DateTime.now(),
     );
   }
 }
