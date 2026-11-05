@@ -65,7 +65,6 @@ class _TuristiScreenState extends State<TuristiScreen> {
   Widget build(BuildContext context) {
     final df = DateFormat('dd.MM.');
 
-    // Sortiraj strogo po rednom broju računa (1, 2, 3...)
     final boravci = List<TuristBoravak>.from(_service.boravci);
     boravci.sort((a, b) {
       final brA = int.tryParse(a.racunBroj.split('/').first) ?? 0;
@@ -115,7 +114,7 @@ class _TuristiScreenState extends State<TuristiScreen> {
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                   subtitle: Text(
-                    '${t.apartmanNaziv}\n${df.format(t.datumDolaska)} - ${df.format(t.datumOdlaska)} (${t.brojDana} noći, ${t.brojOsoba} os.) •${t.nacinPlacanja}',
+                    '${t.apartmanNaziv}\n${df.format(t.datumDolaska)} - ${df.format(t.datumOdlaska)} (${t.brojDana} noći, ${t.brojOsoba} os.) • ${t.nacinPlacanja}',
                   ),
                   isThreeLine: true,
                   trailing: Row(
@@ -150,3 +149,52 @@ class _TuristiScreenState extends State<TuristiScreen> {
                               context,
                               MaterialPageRoute(
                                 builder: (_) => NoviTuristScreen(postojeci: t),
+                              ),
+                            );
+                          } else if (val == 'obrisi') {
+                            _potvrdiBrisanje(context, t);
+                          }
+                        },
+                        itemBuilder: (_) => [
+                          const PopupMenuItem(
+                            value: 'uredi',
+                            child: Row(
+                              children: [
+                                Icon(Icons.edit, size: 18, color: Colors.blue),
+                                SizedBox(width: 8),
+                                Text('Uredi'),
+                              ],
+                            ),
+                          ),
+                          const PopupMenuItem(
+                            value: 'obrisi',
+                            child: Row(
+                              children: [
+                                Icon(Icons.delete, size: 18, color: Colors.red),
+                                SizedBox(width: 8),
+                                Text('Obriši', style: TextStyle(color: Colors.red)),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (ctx) => const NoviTuristScreen(),
+            ),
+          );
+        },
+        icon: const Icon(Icons.person_add),
+        label: const Text('Novi turist'),
+      ),
+    );
+  }
+}
