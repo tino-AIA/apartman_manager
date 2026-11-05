@@ -373,7 +373,7 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
         content: Text(
           'Apartman "$_odabraniApartman" je u odabranom razdoblju već rezerviran.\n\n'
           'Postojeći boravak: $nositelj\n'
-          'Zauzeti period: $odDatuma - $doDatuma\n\n'
+          'Zauzeti period: $odDatuma -$doDatuma\n\n'
           'Molimo odaberite slobodne datume ili drugi apartman.',
         ),
         actions: [
@@ -394,433 +394,440 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
       appBar: AppBar(
         title: Text(widget.postojeci == null ? 'Novi boravak' : 'Uredi boravak'),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // 1. Odabir apartmana
-            DropdownButtonFormField<String>(
-              value: _service.apartmani.any((a) => a.naziv == _odabraniApartman)
-                  ? _odabraniApartman
-                  : (_service.apartmani.isNotEmpty ? _service.apartmani.first.naziv : null),
-              decoration: InputDecoration(
-                labelText: 'Odaberi apartman *',
-                border: const OutlineInputBorder(),
-                prefixIcon: const Icon(Icons.apartment),
-                helperText: 'Maksimalni kapacitet: $_maxKapacitet osoba',
-              ),
-              items: _service.apartmani.map((a) {
-                return DropdownMenuItem(
-                  value: a.naziv,
-                  child: Text('${a.naziv} (max ${a.kapacitet} os.)'),
-                );
-              }).toList(),
-              onChanged: (val) {
-                if (val != null) {
-                  setState(() {
-                    _odabraniApartman = val;
-                    if (widget.postojeci == null) {
-                      _postaviPrviSlobodanTermin(val);
-                    }
-                    _preracunajCijenuPremaDatumu();
-                  });
-                }
-              },
-            ),
-            const SizedBox(height: 16),
-
-            // 2. Odabir datuma
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    icon: const Icon(Icons.calendar_today, size: 16),
-                    label: Text(
-                      'Dolazak:\n${df.format(_dolazak)}',
-                      textAlign: TextAlign.center,
-                    ),
-                    onPressed: () async {
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: _dolazak,
-                        firstDate: DateTime(2025),
-                        lastDate: DateTime(2030),
-                      );
-                      if (picked != null) {
-                        final noviOdlazak = (_odlazak.isBefore(picked) || _odlazak.isAtSameMomentAs(picked))
-                            ? picked.add(const Duration(days: 1))
-                            : _odlazak;
-
-                        final konflikt = _pronadiPreklapanje(picked, noviOdlazak, _odabraniApartman);
-                        if (konflikt != null) {
-                          final t1 = df.format(konflikt.datumDolaska);
-                          final t2 = df.format(konflikt.datumOdlaska);
-                          _prikaziDijalogZauzetosti(konflikt.prezimeIme, t1, t2);
-                        } else {
-                          setState(() {
-                            _dolazak = picked;
-                            _odlazak = noviOdlazak;
-                            _preracunajCijenuPremaDatumu();
-                          });
-                        }
-                      }
-                    },
-                  ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // 1. Odabir apartmana
+              DropdownButtonFormField<String>(
+                value: _service.apartmani.any((a) => a.naziv == _odabraniApartman)
+                    ? _odabraniApartman
+                    : (_service.apartmani.isNotEmpty ? _service.apartmani.first.naziv : null),
+                decoration: InputDecoration(
+                  labelText: 'Odaberi apartman *',
+                  border: const OutlineInputBorder(),
+                  prefixIcon: const Icon(Icons.apartment),
+                  helperText: 'Maksimalni kapacitet: $_maxKapacitet osoba',
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    icon: const Icon(Icons.event, size: 16),
-                    label: Text(
-                      'Odlazak:\n${df.format(_odlazak)}',
-                      textAlign: TextAlign.center,
-                    ),
-                    onPressed: () async {
-                      final minOdlazak = _dolazak.add(const Duration(days: 1));
-
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: _odlazak.isAfter(_dolazak) ? _odlazak : minOdlazak,
-                        firstDate: minOdlazak,
-                        lastDate: DateTime(2030),
-                      );
-                      if (picked != null) {
-                        final konflikt = _pronadiPreklapanje(_dolazak, picked, _odabraniApartman);
-                        if (konflikt != null) {
-                          final t1 = df.format(konflikt.datumDolaska);
-                          final t2 = df.format(konflikt.datumOdlaska);
-                          _prikaziDijalogZauzetosti(konflikt.prezimeIme, t1, t2);
-                        } else {
-                          setState(() => _odlazak = picked);
-                        }
+                items: _service.apartmani.map((a) {
+                  return DropdownMenuItem(
+                    value: a.naziv,
+                    child: Text('${a.naziv} (max${a.kapacitet} os.)'),
+                  );
+                }).toList(),
+                onChanged: (val) {
+                  if (val != null) {
+                    setState(() {
+                      _odabraniApartman = val;
+                      if (widget.postojeci == null) {
+                        _postaviPrviSlobodanTermin(val);
                       }
-                    },
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            // Način plaćanja
-            DropdownButtonFormField<String>(
-              value: _nacinPlacanja,
-              decoration: const InputDecoration(
-                labelText: 'Način plaćanja',
-                border: OutlineInputBorder(),
+                      _preracunajCijenuPremaDatumu();
+                    });
+                  }
+                },
               ),
-              items: const [
-                DropdownMenuItem(value: 'Gotovina / Cash', child: Text('Gotovina / Cash')),
-                DropdownMenuItem(value: 'Kartica / Card', child: Text('Kartica / Card')),
-                DropdownMenuItem(value: 'Booking.com', child: Text('Booking.com')),
-                DropdownMenuItem(value: 'Airbnb', child: Text('Airbnb')),
-                DropdownMenuItem(value: 'Transakcijski račun', child: Text('Transakcijski račun')),
-              ],
-              onChanged: (val) {
-                if (val != null) setState(() => _nacinPlacanja = val);
-              },
-            ),
-            const Divider(height: 32),
+              const SizedBox(height: 16),
 
-            // 3. Popis osoba i eVisitor detalji
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Prijavljene osobe',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                    ),
-                    Text(
-                      '$_brojOsoba / $_maxKapacitet osoba',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: _brojOsoba >= _maxKapacitet ? Colors.orange.shade800 : Colors.grey,
-                        fontWeight: FontWeight.w600,
+              // 2. Odabir datuma
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.calendar_today, size: 16),
+                      label: Text(
+                        'Dolazak:\n${df.format(_dolazak)}',
+                        textAlign: TextAlign.center,
                       ),
+                      onPressed: () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: _dolazak,
+                          firstDate: DateTime(2025),
+                          lastDate: DateTime(2030),
+                        );
+                        if (picked != null) {
+                          final noviOdlazak = (_odlazak.isBefore(picked) || _odlazak.isAtSameMomentAs(picked))
+                              ? picked.add(const Duration(days: 1))
+                              : _odlazak;
+
+                          final konflikt = _pronadiPreklapanje(picked, noviOdlazak, _odabraniApartman);
+                          if (konflikt != null) {
+                            final t1 = df.format(konflikt.datumDolaska);
+                            final t2 = df.format(konflikt.datumOdlaska);
+                            _prikaziDijalogZauzetosti(konflikt.prezimeIme, t1, t2);
+                          } else {
+                            setState(() {
+                              _dolazak = picked;
+                              _odlazak = noviOdlazak;
+                              _preracunajCijenuPremaDatumu();
+                            });
+                          }
+                        }
+                      },
                     ),
-                  ],
-                ),
-                ElevatedButton.icon(
-                  onPressed: _brojOsoba >= _maxKapacitet ? null : _dodajNovogGosta,
-                  icon: const Icon(Icons.person_add, size: 18),
-                  label: const Text('Dodaj osobu'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            const Text(
-              'Označite kvačicom nositelja računa. OCR ikona očitava sve eVisitor podatke:',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
-            ),
-            const SizedBox(height: 8),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.event, size: 16),
+                      label: Text(
+                        'Odlazak:\n${df.format(_odlazak)}',
+                        textAlign: TextAlign.center,
+                      ),
+                      onPressed: () async {
+                        final minOdlazak = _dolazak.add(const Duration(days: 1));
 
-            ..._gostiForm.asMap().entries.map((entry) {
-              final idx = entry.key;
-              final f = entry.value;
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: _odlazak.isAfter(_dolazak) ? _odlazak : minOdlazak,
+                          firstDate: minOdlazak,
+                          lastDate: DateTime(2030),
+                        );
+                        if (picked != null) {
+                          final konflikt = _pronadiPreklapanje(_dolazak, picked, _odabraniApartman);
+                          if (konflikt != null) {
+                            final t1 = df.format(konflikt.datumDolaska);
+                            final t2 = df.format(konflikt.datumOdlaska);
+                            _prikaziDijalogZauzetosti(konflikt.prezimeIme, t1, t2);
+                          } else {
+                            setState(() => _odlazak = picked);
+                          }
+                        }
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
 
-              return Card(
-                elevation: 2,
-                margin: const EdgeInsets.only(bottom: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
+              // Način plaćanja
+              DropdownButtonFormField<String>(
+                value: _nacinPlacanja,
+                decoration: const InputDecoration(
+                  labelText: 'Način plaćanja',
+                  border: OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'Gotovina / Cash', child: Text('Gotovina / Cash')),
+                  DropdownMenuItem(value: 'Kartica / Card', child: Text('Kartica / Card')),
+                  DropdownMenuItem(value: 'Booking.com', child: Text('Booking.com')),
+                  DropdownMenuItem(value: 'Airbnb', child: Text('Airbnb')),
+                  DropdownMenuItem(value: 'Transakcijski račun', child: Text('Transakcijski račun')),
+                ],
+                onChanged: (val) {
+                  if (val != null) setState(() => _nacinPlacanja = val);
+                },
+              ),
+              const Divider(height: 32),
+
+              // 3. Popis osoba i eVisitor detalji
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Radio<int>(
-                            value: idx,
-                            groupValue: _nositeljIndex,
-                            onChanged: (val) => setState(() => _nositeljIndex = val!),
-                          ),
-                          Expanded(
-                            child: TextField(
-                              controller: f.imeController,
-                              decoration: InputDecoration(
-                                labelText: idx == _nositeljIndex
-                                    ? 'Nositelj računa (Prezime i ime) *'
-                                    : 'Osoba ${idx + 1} (Prezime i ime)',
-                                isDense: true,
-                              ),
-                            ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.document_scanner, color: Color(0xFF0D47A1)),
-                            tooltip: 'OCR Skeniraj (OI, putovnica, vozačka)',
-                            onPressed: () => _skenirajZaGosta(idx),
-                          ),
-                          if (_gostiForm.length > 1)
-                            IconButton(
-                              icon: const Icon(Icons.remove_circle, color: Colors.red),
-                              onPressed: () => _ukloniGosta(idx),
-                            ),
-                        ],
+                      const Text(
+                        'Prijavljene osobe',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                       ),
-                      const SizedBox(height: 6),
-
-                      // Gumb za otvaranje/zatvaranje eVisitor detalja
-                      InkWell(
-                        onTap: () {
-                          setState(() {
-                            f.otvoreniDetalji = !f.otvoreniDetalji;
-                          });
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-                          child: Row(
-                            children: [
-                              Icon(
-                                f.otvoreniDetalji ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-                                size: 18,
-                                color: const Color(0xFF0D47A1),
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                f.otvoreniDetalji ? 'Sakrij eVisitor podatke' : 'Prikaži eVisitor podatke',
-                                style: const TextStyle(
-                                  color: Color(0xFF0D47A1),
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              const Spacer(),
-                              if (f.brojDokumentaController.text.isNotEmpty)
-                                Text(
-                                  '${f.vrstaDokumenta}: ${f.brojDokumentaController.text}',
-                                  style: const TextStyle(fontSize: 11, color: Colors.green, fontWeight: FontWeight.bold),
-                                ),
-                            ],
-                          ),
+                      Text(
+                        '$_brojOsoba / $_maxKapacitet osoba',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: _brojOsoba >= _maxKapacitet ? Colors.orange.shade800 : Colors.grey,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
-
-                      // Proširiva eVisitor polja
-                      if (f.otvoreniDetalji) ...[
-                        const Divider(height: 16),
-                        Row(
-                          children: [
-                            Expanded(
-                              flex: 3,
-                              child: DropdownButtonFormField<String>(
-                                value: f.vrstaDokumenta,
-                                isDense: true,
-                                decoration: const InputDecoration(
-                                  labelText: 'Vrsta isprave',
-                                  border: OutlineInputBorder(),
-                                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                                ),
-                                items: const [
-                                  DropdownMenuItem(value: 'Osobna iskaznica', child: Text('Osobna')),
-                                  DropdownMenuItem(value: 'Putovnica', child: Text('Putovnica')),
-                                  DropdownMenuItem(value: 'Vozačka dozvola', child: Text('Vozačka')),
-                                  DropdownMenuItem(value: 'Ostalo', child: Text('Ostalo')),
-                                ],
-                                onChanged: (val) {
-                                  if (val != null) setState(() => f.vrstaDokumenta = val);
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              flex: 4,
-                              child: TextField(
-                                controller: f.brojDokumentaController,
-                                decoration: const InputDecoration(
-                                  labelText: 'Broj isprave',
-                                  isDense: true,
-                                  border: OutlineInputBorder(),
-                                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Expanded(
-                              flex: 4,
-                              child: TextField(
-                                controller: f.datumRodenjaController,
-                                decoration: const InputDecoration(
-                                  labelText: 'Datum rođenja (dd.mm.gggg)',
-                                  isDense: true,
-                                  border: OutlineInputBorder(),
-                                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              flex: 2,
-                              child: DropdownButtonFormField<String>(
-                                value: f.spol.isNotEmpty ? f.spol : null,
-                                hint: const Text('Spol'),
-                                isDense: true,
-                                decoration: const InputDecoration(
-                                  labelText: 'Spol',
-                                  border: OutlineInputBorder(),
-                                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                                ),
-                                items: const [
-                                  DropdownMenuItem(value: 'M', child: Text('M')),
-                                  DropdownMenuItem(value: 'Ž', child: Text('Ž')),
-                                ],
-                                onChanged: (val) {
-                                  if (val != null) setState(() => f.spol = val);
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              flex: 3,
-                              child: TextField(
-                                controller: f.drzavljanstvoController,
-                                decoration: const InputDecoration(
-                                  labelText: 'Držav.',
-                                  hintText: 'HRV',
-                                  isDense: true,
-                                  border: OutlineInputBorder(),
-                                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: f.gradPrebivalistaController,
-                          decoration: const InputDecoration(
-                            labelText: 'Grad / Mjesto prebivališta',
-                            isDense: true,
-                            border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                          ),
-                        ),
-                      ],
                     ],
                   ),
-                ),
-              );
-            }),
-
-            const Divider(height: 32),
-
-            // 4. Kalkulacija cijene
-            Text(
-              'Kalkulacija cijene ($_brojNoci noćenja • $_brojOsoba os.)',
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    controller: _cijenaController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(
-                      labelText: 'Cijena os./noć (€)',
-                      border: OutlineInputBorder(),
-                    ),
-                    onChanged: (_) => setState(() {}),
+                  ElevatedButton.icon(
+                    onPressed: _brojOsoba >= _maxKapacitet ? null : _dodajNovogGosta,
+                    icon: const Icon(Icons.person_add, size: 18),
+                    label: const Text('Dodaj osobu'),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Container(
+                ],
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Označite kvačicom nositelja računa. OCR ikona očitava sve eVisitor podatke:',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+              const SizedBox(height: 8),
+
+              ..._gostiForm.asMap().entries.map((entry) {
+                final idx = entry.key;
+                final f = entry.value;
+
+                return Card(
+                  elevation: 2,
+                  margin: const EdgeInsets.only(bottom: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  child: Padding(
                     padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey.shade400),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('UKUPNO (€)',
-                            style: TextStyle(fontSize: 10, color: Colors.grey)),
-                        Text(
-                          '${_ukupno.toStringAsFixed(2)} €',
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.blue,
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Radio<int>(
+                              value: idx,
+                              groupValue: _nositeljIndex,
+                              onChanged: (val) => setState(() => _nositeljIndex = val!),
+                            ),
+                            Expanded(
+                              child: TextField(
+                                controller: f.imeController,
+                                decoration: InputDecoration(
+                                  labelText: idx == _nositeljIndex
+                                      ? 'Nositelj računa (Prezime i ime) *'
+                                      : 'Osoba ${idx + 1} (Prezime i ime)',
+                                  isDense: true,
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.document_scanner, color: Color(0xFF0D47A1)),
+                              tooltip: 'OCR Skeniraj (OI, putovnica, vozačka)',
+                              onPressed: () => _skenirajZaGosta(idx),
+                            ),
+                            if (_gostiForm.length > 1)
+                              IconButton(
+                                icon: const Icon(Icons.remove_circle, color: Colors.red),
+                                onPressed: () => _ukloniGosta(idx),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+
+                        // Gumb za otvaranje/zatvaranje eVisitor detalja
+                        InkWell(
+                          onTap: () {
+                            setState(() {
+                              f.otvoreniDetalji = !f.otvoreniDetalji;
+                            });
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  f.otvoreniDetalji ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                                  size: 18,
+                                  color: const Color(0xFF0D47A1),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  f.otvoreniDetalji ? 'Sakrij eVisitor podatke' : 'Prikaži eVisitor podatke',
+                                  style: const TextStyle(
+                                    color: Color(0xFF0D47A1),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const Spacer(),
+                                if (f.brojDokumentaController.text.isNotEmpty)
+                                  Text(
+                                    '${f.vrstaDokumenta}:${f.brojDokumentaController.text}',
+                                    style: const TextStyle(fontSize: 11, color: Colors.green, fontWeight: FontWeight.bold),
+                                  ),
+                              ],
+                            ),
                           ),
                         ),
+
+                        // Proširiva eVisitor polja
+                        if (f.otvoreniDetalji) ...[
+                          const Divider(height: 16),
+                          Row(
+                            children: [
+                              Expanded(
+                                flex: 3,
+                                child: DropdownButtonFormField<String>(
+                                  value: f.vrstaDokumenta,
+                                  isDense: true,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Vrsta isprave',
+                                    border: OutlineInputBorder(),
+                                    contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                  ),
+                                  items: const [
+                                    DropdownMenuItem(value: 'Osobna iskaznica', child: Text('Osobna')),
+                                    DropdownMenuItem(value: 'Putovnica', child: Text('Putovnica')),
+                                    DropdownMenuItem(value: 'Vozačka dozvola', child: Text('Vozačka')),
+                                    DropdownMenuItem(value: 'Ostalo', child: Text('Ostalo')),
+                                  ],
+                                  onChanged: (val) {
+                                    if (val != null) setState(() => f.vrstaDokumenta = val);
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                flex: 4,
+                                child: TextField(
+                                  controller: f.brojDokumentaController,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Broj isprave',
+                                    isDense: true,
+                                    border: OutlineInputBorder(),
+                                    contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                flex: 4,
+                                child: TextField(
+                                  controller: f.datumRodenjaController,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Datum rođenja (dd.mm.gggg)',
+                                    isDense: true,
+                                    border: OutlineInputBorder(),
+                                    contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                flex: 2,
+                                child: DropdownButtonFormField<String>(
+                                  value: f.spol.isNotEmpty ? f.spol : null,
+                                  hint: const Text('Spol'),
+                                  isDense: true,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Spol',
+                                    border: OutlineInputBorder(),
+                                    contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                  ),
+                                  items: const [
+                                    DropdownMenuItem(value: 'M', child: Text('M')),
+                                    DropdownMenuItem(value: 'Ž', child: Text('Ž')),
+                                  ],
+                                  onChanged: (val) {
+                                    if (val != null) setState(() => f.spol = val);
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                flex: 3,
+                                child: TextField(
+                                  controller: f.drzavljanstvoController,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Držav.',
+                                    hintText: 'HRV',
+                                    isDense: true,
+                                    border: OutlineInputBorder(),
+                                    contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: f.gradPrebivalistaController,
+                            decoration: const InputDecoration(
+                              labelText: 'Grad / Mjesto prebivališta',
+                              isDense: true,
+                              border: OutlineInputBorder(),
+                              contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
-                )
-              ],
-            ),
-            const SizedBox(height: 24),
+                );
+              }),
 
-            ElevatedButton.icon(
-              onPressed: _spremam ? null : _spremi,
-              icon: _spremam
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                    )
-                  : const Icon(Icons.check),
-              label: Text(
-                _spremam
-                    ? 'SPREMANJE...'
-                    : (widget.postojeci == null
-                        ? 'SPREMI I DODAJ NA POPIS'
-                        : 'SPREMI IZMJENE'),
+              const Divider(height: 32),
+
+              // 4. Kalkulacija cijene
+              Text(
+                'Kalkulacija cijene ($_brojNoci noćenja • $_brojOsoba os.)',
+                style: const TextStyle(fontWeight: FontWeight.bold),
               ),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                backgroundColor: const Color(0xFF0D47A1),
-                foregroundColor: Colors.white,
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _cijenaController,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: 'Cijena os./noć (€)',
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey.shade400),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('UKUPNO (€)',
+                              style: TextStyle(fontSize: 10, color: Colors.grey)),
+                          Text(
+                            '${_ukupno.toStringAsFixed(2)} €',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.blue,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                ],
               ),
-            ),
-          ],
+              const SizedBox(height: 24),
+
+              ElevatedButton.icon(
+                onPressed: _spremam ? null : _spremi,
+                icon: _spremam
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                      )
+                    : const Icon(Icons.check),
+                label: Text(
+                  _spremam
+                      ? 'SPREMANJE...'
+                      : (widget.postojeci == null
+                          ? 'SPREMI I DODAJ NA POPIS'
+                          : 'SPREMI IZMJENE'),
+                ),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  backgroundColor: const Color(0xFF0D47A1),
+                  foregroundColor: Colors.white,
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
         ),
       ),
     );
