@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../models/turist_model.dart';
 import '../services/podaci_service.dart';
 import 'novi_turist_screen.dart';
+import 'evisitor_screen.dart';
 
 class TuristiScreen extends StatefulWidget {
   const TuristiScreen({super.key});
@@ -78,6 +79,16 @@ class _TuristiScreenState extends State<TuristiScreen> {
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
           IconButton(
+            icon: const Icon(Icons.badge_outlined),
+            tooltip: 'eVisitor prijava (CSV)',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const EvisitorScreen()),
+              );
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'Osvježi podatke',
             onPressed: () => _service.ucitajIzSupabase(),
@@ -97,6 +108,8 @@ class _TuristiScreenState extends State<TuristiScreen> {
               separatorBuilder: (_, __) => const Divider(height: 1),
               itemBuilder: (context, index) {
                 final t = boravci[index];
+                final imaNeprijavljenih = t.gosti.any((g) => !g.evisitorPrijavljen);
+
                 return ListTile(
                   leading: CircleAvatar(
                     backgroundColor: const Color(0xFF0D47A1),
@@ -109,9 +122,23 @@ class _TuristiScreenState extends State<TuristiScreen> {
                       ),
                     ),
                   ),
-                  title: Text(
-                    t.prezimeIme,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  title: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          t.prezimeIme,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      Tooltip(
+                        message: imaNeprijavljenih ? 'Nije prijavljen u eVisitor' : 'Prijavljen u eVisitor',
+                        child: Icon(
+                          imaNeprijavljenih ? Icons.hourglass_top_outlined : Icons.check_circle_outline,
+                          size: 16,
+                          color: imaNeprijavljenih ? Colors.orange.shade800 : Colors.green,
+                        ),
+                      ),
+                    ],
                   ),
                   subtitle: Text(
                     '${t.apartmanNaziv}\n${df.format(t.datumDolaska)} - ${df.format(t.datumOdlaska)} (${t.brojDana} noći, ${t.brojOsoba} os.) • ${t.nacinPlacanja}',
