@@ -13,6 +13,36 @@ class NoviTuristScreen extends StatefulWidget {
   State<NoviTuristScreen> createState() => _NoviTuristScreenState();
 }
 
+class _GostFormPodaci {
+  final TextEditingController imeController;
+  final TextEditingController brojDokumentaController;
+  final TextEditingController datumRodenjaController;
+  final TextEditingController drzavljanstvoController;
+  final TextEditingController gradPrebivalistaController;
+  String spol;
+  String vrstaDokumenta;
+  bool otvoreniDetalji;
+
+  _GostFormPodaci({
+    required this.imeController,
+    required this.brojDokumentaController,
+    required this.datumRodenjaController,
+    required this.drzavljanstvoController,
+    required this.gradPrebivalistaController,
+    this.spol = '',
+    this.vrstaDokumenta = 'Osobna iskaznica',
+    this.otvoreniDetalji = false,
+  });
+
+  void dispose() {
+    imeController.dispose();
+    brojDokumentaController.dispose();
+    datumRodenjaController.dispose();
+    drzavljanstvoController.dispose();
+    gradPrebivalistaController.dispose();
+  }
+}
+
 class _NoviTuristScreenState extends State<NoviTuristScreen> {
   final _service = PodaciService();
   final _ocrService = OcrService();
@@ -22,8 +52,7 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
   late DateTime _dolazak;
   late DateTime _odlazak;
 
-  final List<TextEditingController> _imeControllers = [];
-  final List<String> _brojeviDokumenata = [];
+  final List<_GostFormPodaci> _gostiForm = [];
   int _nositeljIndex = 0;
 
   final _cijenaController = TextEditingController();
@@ -38,9 +67,18 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
       _nacinPlacanja = p.nacinPlacanja;
       _dolazak = p.datumDolaska;
       _odlazak = p.datumOdlaska;
+
       for (final g in p.gosti) {
-        _imeControllers.add(TextEditingController(text: g.prezimeIme));
-        _brojeviDokumenata.add(g.brojDokumenta);
+        _gostiForm.add(_GostFormPodaci(
+          imeController: TextEditingController(text: g.prezimeIme),
+          brojDokumentaController: TextEditingController(text: g.brojDokumenta),
+          datumRodenjaController: TextEditingController(text: g.datumRodenja),
+          drzavljanstvoController: TextEditingController(text: g.drzavljanstvo),
+          gradPrebivalistaController: TextEditingController(text: g.gradPrebivalista),
+          spol: g.spol,
+          vrstaDokumenta: g.vrstaDokumenta.isNotEmpty ? g.vrstaDokumenta : 'Osobna iskaznica',
+          otvoreniDetalji: g.datumRodenja.isNotEmpty || g.drzavljanstvo.isNotEmpty,
+        ));
       }
       _nositeljIndex = p.gosti.indexWhere((g) => g.nositeljRacuna);
       if (_nositeljIndex == -1) _nositeljIndex = 0;
@@ -51,11 +89,16 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
           : 'Apartman A1';
       _nacinPlacanja = 'Gotovina / Cash';
 
-      // Automatski postavi datume na prvi sljedeći slobodni period za apartman
       _postaviPrviSlobodanTermin(_odabraniApartman);
 
-      _imeControllers.add(TextEditingController());
-      _brojeviDokumenata.add('');
+      _gostiForm.add(_GostFormPodaci(
+        imeController: TextEditingController(),
+        brojDokumentaController: TextEditingController(),
+        datumRodenjaController: TextEditingController(),
+        drzavljanstvoController: TextEditingController(),
+        gradPrebivalistaController: TextEditingController(),
+      ));
+
       _cijenaController.text = _service
           .dohvatiCijenuZaDatum(_dolazak, apartmanNaziv: _odabraniApartman)
           .toStringAsFixed(2);
@@ -64,8 +107,8 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
 
   @override
   void dispose() {
-    for (final c in _imeControllers) {
-      c.dispose();
+    for (final g in _gostiForm) {
+      g.dispose();
     }
     _cijenaController.dispose();
     super.dispose();
@@ -79,7 +122,6 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
     return ap.kapacitet > 0 ? ap.kapacitet : 10;
   }
 
-  /// Pronalazi zadnji dan zauzeća za apartman i postavlja dolazak na taj dan (ili danas ako je slobodan)
   void _postaviPrviSlobodanTermin(String apartmanNaziv) {
     final zauzetiBoravci = _service.boravci
         .where((b) => b.apartmanNaziv == apartmanNaziv && b.id != widget.postojeci?.id)
@@ -88,11 +130,9 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
     DateTime predlozeniDolazak = DateTime.now();
 
     if (zauzetiBoravci.isNotEmpty) {
-      // Sortiraj po datumu odlaska uzlazno
       zauzetiBoravci.sort((a, b) => a.datumOdlaska.compareTo(b.datumOdlaska));
       final zadnjiOdlazak = zauzetiBoravci.last.datumOdlaska;
 
-      // Ako je zadnji odlazak u budućnosti, sljedeći gost može doći na dan odlaska prethodnog
       if (zadnjiOdlazak.isAfter(predlozeniDolazak)) {
         predlozeniDolazak = zadnjiOdlazak;
       }
@@ -102,8 +142,6 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
     _odlazak = _dolazak.add(const Duration(days: 7));
   }
 
-  /// Provjera preklapanja: novi boravak se preklapa ako je novi dolazak prije postojećeg odlaska,
-  /// a novi odlazak poslije postojećeg dolaska.
   TuristBoravak? _pronadiPreklapanje(DateTime start, DateTime end, String apartman) {
     for (var b in _service.boravci) {
       if (widget.postojeci != null && b.id == widget.postojeci!.id) continue;
@@ -112,7 +150,6 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
       final postojeciStart = DateTime(b.datumDolaska.year, b.datumDolaska.month, b.datumDolaska.day);
       final postojeciEnd = DateTime(b.datumOdlaska.year, b.datumOdlaska.month, b.datumOdlaska.day);
 
-      // Preklapanje termina
       if (start.isBefore(postojeciEnd) && end.isAfter(postojeciStart)) {
         return b;
       }
@@ -125,7 +162,7 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
     return diff <= 0 ? 1 : diff;
   }
 
-  int get _brojOsoba => _imeControllers.length;
+  int get _brojOsoba => _gostiForm.length;
 
   double get _cijenaPoOsobi =>
       double.tryParse(_cijenaController.text.replaceAll(',', '.')) ?? 0.0;
@@ -144,15 +181,31 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
     final doc = await _ocrService.skenirajDokument(context);
     if (doc != null && doc.punoIme.isNotEmpty) {
       setState(() {
-        _imeControllers[index].text = doc.punoIme;
-        _brojeviDokumenata[index] = doc.brojDokumenta;
+        final g = _gostiForm[index];
+        g.imeController.text = doc.punoIme;
+        if (doc.brojDokumenta.isNotEmpty) {
+          g.brojDokumentaController.text = doc.brojDokumenta;
+        }
+        if (doc.datumRodenjaTekst.isNotEmpty) {
+          g.datumRodenjaController.text = doc.datumRodenjaTekst;
+        }
+        if (doc.spol.isNotEmpty) {
+          g.spol = doc.spol;
+        }
+        if (doc.drzavljanstvo.isNotEmpty) {
+          g.drzavljanstvoController.text = doc.drzavljanstvo;
+        }
+        if (doc.vrstaDokumenta.isNotEmpty) {
+          g.vrstaDokumenta = doc.vrstaDokumenta;
+        }
+        g.otvoreniDetalji = true;
       });
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              'Očitano: ${doc.punoIme} ${doc.brojDokumenta.isNotEmpty ? "(${doc.brojDokumenta})" : ""}',
-            ),
+            content: Text('Uspješno očitano: ${doc.punoIme} (${doc.vrstaDokumenta})'),
+            backgroundColor: Colors.green.shade700,
           ),
         );
       }
@@ -160,8 +213,7 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
   }
 
   void _dodajNovogGosta() {
-    // Pravilo 3: Onemogućavanje unosa većeg broja gostiju od kapaciteta
-    if (_imeControllers.length >= _maxKapacitet) {
+    if (_gostiForm.length >= _maxKapacitet) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -174,27 +226,30 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
     }
 
     setState(() {
-      _imeControllers.add(TextEditingController());
-      _brojeviDokumenata.add('');
+      _gostiForm.add(_GostFormPodaci(
+        imeController: TextEditingController(),
+        brojDokumentaController: TextEditingController(),
+        datumRodenjaController: TextEditingController(),
+        drzavljanstvoController: TextEditingController(),
+        gradPrebivalistaController: TextEditingController(),
+      ));
     });
   }
 
   void _ukloniGosta(int index) {
-    if (_imeControllers.length <= 1) return;
+    if (_gostiForm.length <= 1) return;
     setState(() {
-      _imeControllers[index].dispose();
-      _imeControllers.removeAt(index);
-      _brojeviDokumenata.removeAt(index);
-      if (_nositeljIndex >= _imeControllers.length) {
+      _gostiForm[index].dispose();
+      _gostiForm.removeAt(index);
+      if (_nositeljIndex >= _gostiForm.length) {
         _nositeljIndex = 0;
       }
     });
   }
 
   Future<void> _spremi() async {
-    // Pravilo: Obvezan unos barem 1 osobe s imenom i prezimenom
-    final uneseniGosti = _imeControllers
-        .map((c) => c.text.trim())
+    final uneseniGosti = _gostiForm
+        .map((g) => g.imeController.text.trim())
         .where((ime) => ime.isNotEmpty)
         .toList();
 
@@ -208,8 +263,7 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
       return;
     }
 
-    // Provjera nositelja računa
-    final nositeljIme = _imeControllers[_nositeljIndex].text.trim();
+    final nositeljIme = _gostiForm[_nositeljIndex].imeController.text.trim();
     if (nositeljIme.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -220,7 +274,6 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
       return;
     }
 
-    // Provjera preklapanja prije spremanja
     final konflikt = _pronadiPreklapanje(_dolazak, _odlazak, _odabraniApartman);
     if (konflikt != null) {
       final df = DateFormat('dd.MM.yyyy.');
@@ -230,8 +283,7 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
       return;
     }
 
-    // Provjera kapaciteta
-    if (_imeControllers.length > _maxKapacitet) {
+    if (_gostiForm.length > _maxKapacitet) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Broj prijavljenih osoba prelazi kapacitet ($_maxKapacitet).'),
@@ -246,19 +298,25 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
 
     try {
       List<GostStavka> gosti = [];
-      for (int i = 0; i < _imeControllers.length; i++) {
-        String ime = _imeControllers[i].text.trim();
+      for (int i = 0; i < _gostiForm.length; i++) {
+        final f = _gostiForm[i];
+        String ime = f.imeController.text.trim();
         if (ime.isEmpty) {
           ime = 'Gost ${i + 1}';
         }
+
         gosti.add(GostStavka(
           prezimeIme: ime,
-          brojDokumenta: _brojeviDokumenata[i],
+          brojDokumenta: f.brojDokumentaController.text.trim(),
           nositeljRacuna: (i == _nositeljIndex),
+          spol: f.spol,
+          datumRodenja: f.datumRodenjaController.text.trim(),
+          drzavljanstvo: f.drzavljanstvoController.text.trim(),
+          vrstaDokumenta: f.vrstaDokumenta,
+          gradPrebivalista: f.gradPrebivalistaController.text.trim(),
         ));
       }
 
-      // Novi račun uvijek dobiva sljedeći najveći broj neovisno o datumu dolaska
       final String dodijeljeniBrojRacuna =
           (widget.postojeci != null && widget.postojeci!.racunBroj.isNotEmpty)
               ? widget.postojeci!.racunBroj
@@ -280,6 +338,7 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
         nacinPlacanja: _nacinPlacanja,
         racunBroj: dodijeljeniBrojRacuna,
         racunIspisan: widget.postojeci?.racunIspisan ?? false,
+        createdAt: widget.postojeci?.createdAt,
       );
 
       if (widget.postojeci != null) {
@@ -371,7 +430,7 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
             ),
             const SizedBox(height: 16),
 
-            // 2. Odabir datuma (Zabrana preklapanja i odlaska prije dolaska)
+            // 2. Odabir datuma
             Row(
               children: [
                 Expanded(
@@ -418,7 +477,6 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
                       textAlign: TextAlign.center,
                     ),
                     onPressed: () async {
-                      // Pravilo 2: Odlazak može biti najranije dan poslije dolaska
                       final minOdlazak = _dolazak.add(const Duration(days: 1));
 
                       final picked = await showDatePicker(
@@ -464,7 +522,7 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
             ),
             const Divider(height: 32),
 
-            // 3. Popis osoba i nositelj računa s limitom kapaciteta
+            // 3. Popis osoba i eVisitor detalji
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -494,33 +552,34 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
             ),
             const SizedBox(height: 4),
             const Text(
-              'Označite kvačicom osobu na čije ime ide račun:',
+              'Označite kvačicom nositelja računa. OCR ikona očitava sve eVisitor podatke:',
               style: TextStyle(fontSize: 12, color: Colors.grey),
             ),
             const SizedBox(height: 8),
 
-            ..._imeControllers.asMap().entries.map((entry) {
+            ..._gostiForm.asMap().entries.map((entry) {
               final idx = entry.key;
-              final controller = entry.value;
-              final brojDoc = _brojeviDokumenata[idx];
+              final f = entry.value;
 
               return Card(
-                margin: const EdgeInsets.only(bottom: 8),
+                elevation: 2,
+                margin: const EdgeInsets.only(bottom: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  child: Row(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
                     children: [
-                      Radio<int>(
-                        value: idx,
-                        groupValue: _nositeljIndex,
-                        onChanged: (val) => setState(() => _nositeljIndex = val!),
-                      ),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            TextField(
-                              controller: controller,
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Radio<int>(
+                            value: idx,
+                            groupValue: _nositeljIndex,
+                            onChanged: (val) => setState(() => _nositeljIndex = val!),
+                          ),
+                          Expanded(
+                            child: TextField(
+                              controller: f.imeController,
                               decoration: InputDecoration(
                                 labelText: idx == _nositeljIndex
                                     ? 'Nositelj računa (Prezime i ime) *'
@@ -528,31 +587,161 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
                                 isDense: true,
                               ),
                             ),
-                            if (brojDoc.isNotEmpty)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 2, left: 2),
-                                child: Text(
-                                  'Dokument: $brojDoc',
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.green,
-                                    fontWeight: FontWeight.w600,
-                                  ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.document_scanner, color: Color(0xFF0D47A1)),
+                            tooltip: 'OCR Skeniraj (OI, putovnica, vozačka)',
+                            onPressed: () => _skenirajZaGosta(idx),
+                          ),
+                          if (_gostiForm.length > 1)
+                            IconButton(
+                              icon: const Icon(Icons.remove_circle, color: Colors.red),
+                              onPressed: () => _ukloniGosta(idx),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+
+                      // Gumb za otvaranje/zatvaranje eVisitor detalja
+                      InkWell(
+                        onTap: () {
+                          setState(() {
+                            f.otvoreniDetalji = !f.otvoreniDetalji;
+                          });
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                          child: Row(
+                            children: [
+                              Icon(
+                                f.otvoreniDetalji ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                                size: 18,
+                                color: const Color(0xFF0D47A1),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                f.otvoreniDetalji ? 'Sakrij eVisitor podatke' : 'Prikaži eVisitor podatke',
+                                style: const TextStyle(
+                                  color: Color(0xFF0D47A1),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
+                              const Spacer(),
+                              if (f.brojDokumentaController.text.isNotEmpty)
+                                Text(
+                                  '${f.vrstaDokumenta}: ${f.brojDokumentaController.text}',
+                                  style: const TextStyle(fontSize: 11, color: Colors.green, fontWeight: FontWeight.bold),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      // Proširiva eVisitor polja
+                      if (f.otvoreniDetalji) ...[
+                        const Divider(height: 16),
+                        Row(
+                          children: [
+                            Expanded(
+                              flex: 3,
+                              child: DropdownButtonFormField<String>(
+                                value: f.vrstaDokumenta,
+                                isDense: true,
+                                decoration: const InputDecoration(
+                                  labelText: 'Vrsta isprave',
+                                  border: OutlineInputBorder(),
+                                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                ),
+                                items: const [
+                                  DropdownMenuItem(value: 'Osobna iskaznica', child: Text('Osobna')),
+                                  DropdownMenuItem(value: 'Putovnica', child: Text('Putovnica')),
+                                  DropdownMenuItem(value: 'Vozačka dozvola', child: Text('Vozačka')),
+                                  DropdownMenuItem(value: 'Ostalo', child: Text('Ostalo')),
+                                ],
+                                onChanged: (val) {
+                                  if (val != null) setState(() => f.vrstaDokumenta = val);
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              flex: 4,
+                              child: TextField(
+                                controller: f.brojDokumentaController,
+                                decoration: const InputDecoration(
+                                  labelText: 'Broj isprave',
+                                  isDense: true,
+                                  border: OutlineInputBorder(),
+                                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                ),
+                              ),
+                            ),
                           ],
                         ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.document_scanner, color: Colors.blue),
-                        tooltip: 'OCR Skeniraj (Kamera ili Galerija)',
-                        onPressed: () => _skenirajZaGosta(idx),
-                      ),
-                      if (_imeControllers.length > 1)
-                        IconButton(
-                          icon: const Icon(Icons.remove_circle, color: Colors.red),
-                          onPressed: () => _ukloniGosta(idx),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              flex: 4,
+                              child: TextField(
+                                controller: f.datumRodenjaController,
+                                decoration: const InputDecoration(
+                                  labelText: 'Datum rođenja (dd.mm.gggg)',
+                                  isDense: true,
+                                  border: OutlineInputBorder(),
+                                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              flex: 2,
+                              child: DropdownButtonFormField<String>(
+                                value: f.spol.isNotEmpty ? f.spol : null,
+                                hint: const Text('Spol'),
+                                isDense: true,
+                                decoration: const InputDecoration(
+                                  labelText: 'Spol',
+                                  border: OutlineInputBorder(),
+                                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                ),
+                                items: const [
+                                  DropdownMenuItem(value: 'M', child: Text('M')),
+                                  DropdownMenuItem(value: 'Ž', child: Text('Ž')),
+                                ],
+                                onChanged: (val) {
+                                  if (val != null) setState(() => f.spol = val);
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              flex: 3,
+                              child: TextField(
+                                controller: f.drzavljanstvoController,
+                                decoration: const InputDecoration(
+                                  labelText: 'Držav.',
+                                  hintText: 'HRV',
+                                  isDense: true,
+                                  border: OutlineInputBorder(),
+                                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: f.gradPrebivalistaController,
+                          decoration: const InputDecoration(
+                            labelText: 'Grad / Mjesto prebivališta',
+                            isDense: true,
+                            border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
