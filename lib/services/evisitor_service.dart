@@ -47,7 +47,7 @@ class EvisitorService {
   Future<bool> generirajIExportajCsv(List<EvisitorKandidat> odabrani) async {
     if (odabrani.isEmpty) return false;
 
-    // 1. Dohvat postavki iz baze (vrijeme i objekt)
+    // 1. Postavke vlasnika
     String checkInVrijeme = '14:00';
     String checkOutVrijeme = '10:00';
     String evisitorNazivObjekta = '';
@@ -71,8 +71,9 @@ class EvisitorService {
 
     final dfDatum = DateFormat('dd.MM.yyyy');
 
+    // Službeno eVisitor prošireno zaglavlje
     final List<String> csvRedci = [
-      'Prezime;Ime;Spol;Drzavljanstvo;DatumRodenja;GradPrebivalista;VrstaIsprave;BrojIsprave;DatumDolaska;VrijemeDolaska;DatumOdlaska;VrijemeOdlaska;Objekt'
+      'Prezime;Ime;Spol;Drzavljanstvo;DatumRodenja;GradPrebivalista;DrzavaPrebivalista;VrstaIsprave;BrojIsprave;OIB;DatumDolaska;VrijemeDolaska;DatumOdlaska;VrijemeOdlaska;Objekt'
     ];
 
     for (final k in odabrani) {
@@ -86,9 +87,16 @@ class EvisitorService {
       final spolOznaka = g.spol.toUpperCase().startsWith('M')
           ? 'M'
           : (g.spol.toUpperCase().startsWith('Ž') || g.spol.toUpperCase().startsWith('F') ? 'Z' : '');
-      final vrstaIsprave = _mapirajVrstuIsprave(g.vrstaDokumenta);
 
-      // Određivanje vrijednosti stupca Objekt
+      final drzavljanstvo = g.drzavljanstvo.toUpperCase().trim();
+      final drzavaPrebivalista = g.drzavaPrebivalista.isNotEmpty
+          ? g.drzavaPrebivalista.toUpperCase().trim()
+          : drzavljanstvo; // automatski jednaka državljanstvu ako nije upisana
+
+      // Automatsko određivanje eVisitor vrste isprave (domaća ili strana)
+      final vrstaIsprave = _odrediEvisitorIspravu(g.vrstaDokumenta, drzavljanstvo);
+
+      // Objekt
       String objektZaCsv = '';
       if (!evisitorPrazanObjekt) {
         if (evisitorNazivObjekta.trim().isNotEmpty) {
@@ -102,11 +110,13 @@ class EvisitorService {
         _ocistiCsvVrijednost(prezime),
         _ocistiCsvVrijednost(ime),
         spolOznaka,
-        g.drzavljanstvo.toUpperCase().trim(),
+        drzavljanstvo,
         g.datumRodenja.trim(),
         _ocistiCsvVrijednost(g.gradPrebivalista),
+        drzavaPrebivalista,
         vrstaIsprave,
         _ocistiCsvVrijednost(g.brojDokumenta),
+        _ocistiCsvVrijednost(g.oib),
         dfDatum.format(b.datumDolaska),
         checkInVrijeme,
         dfDatum.format(b.datumOdlaska),
@@ -158,11 +168,19 @@ class EvisitorService {
     }
   }
 
-  String _mapirajVrstuIsprave(String vrsta) {
+  /// Automatski razlikuje domaće i strane isprave prema državljanstvu
+  String _odrediEvisitorIspravu(String vrsta, String drzavljanstvo) {
     final v = vrsta.toLowerCase();
-    if (v.contains('putovnic') || v.contains('pass')) return 'PUTOVNICA';
-    if (v.contains('vozač') || v.contains('driv')) return 'VOZACKA';
-    return 'OSOBNA';
+    final jeDomaci = (drzavljanstvo == 'HRV' || drzavljanstvo == 'HR');
+
+    if (v.contains('putovnic') || v.contains('pass')) {
+      return jeDomaci ? 'PUTOVNICA_DOMACA' : 'PUTOVNICA_STRANA';
+    }
+    if (v.contains('vozač') || v.contains('driv')) {
+      return 'VOZACKA';
+    }
+    // Zadano: osobna iskaznica
+    return jeDomaci ? 'OSOBNA_DOMACA' : 'OSOBNA_STRANA';
   }
 
   String _ocistiCsvVrijednost(String val) {
