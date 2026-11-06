@@ -9,6 +9,8 @@ class GostStavka {
   String drzavljanstvo;
   String vrstaDokumenta;
   String gradPrebivalista;
+  String drzavaPrebivalista;
+  String oib;
   bool evisitorPrijavljen;
   DateTime? evisitorVrijemePrijave;
 
@@ -21,6 +23,8 @@ class GostStavka {
     this.drzavljanstvo = '',
     this.vrstaDokumenta = 'Osobna iskaznica',
     this.gradPrebivalista = '',
+    this.drzavaPrebivalista = '',
+    this.oib = '',
     this.evisitorPrijavljen = false,
     this.evisitorVrijemePrijave,
   });
@@ -34,6 +38,8 @@ class GostStavka {
         'drzavljanstvo': drzavljanstvo,
         'vrsta_dokumenta': vrstaDokumenta,
         'grad_prebivalista': gradPrebivalista,
+        'drzava_prebivalista': drzavaPrebivalista,
+        'oib': oib,
         'evisitor_prijavljen': evisitorPrijavljen,
         'evisitor_vrijeme_prijave': evisitorVrijemePrijave?.toIso8601String(),
       };
@@ -49,6 +55,8 @@ class GostStavka {
       drzavljanstvo: (map['drzavljanstvo'])?.toString() ?? '',
       vrstaDokumenta: (map['vrsta_dokumenta'] ?? map['vrstaDokumenta'])?.toString() ?? 'Osobna iskaznica',
       gradPrebivalista: (map['grad_prebivalista'] ?? map['gradPrebivalista'])?.toString() ?? '',
+      drzavaPrebivalista: (map['drzava_prebivalista'] ?? map['drzavaPrebivalista'])?.toString() ?? '',
+      oib: (map['oib'])?.toString() ?? '',
       evisitorPrijavljen: map['evisitor_prijavljen'] == true,
       evisitorVrijemePrijave: vPrijava != null ? DateTime.tryParse(vPrijava) : null,
     );
