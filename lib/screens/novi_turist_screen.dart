@@ -19,6 +19,7 @@ class _GostFormPodaci {
   final TextEditingController datumRodenjaController;
   final TextEditingController drzavljanstvoController;
   final TextEditingController gradPrebivalistaController;
+  final TextEditingController oibController;
   String spol;
   String vrstaDokumenta;
   bool otvoreniDetalji;
@@ -29,6 +30,7 @@ class _GostFormPodaci {
     required this.datumRodenjaController,
     required this.drzavljanstvoController,
     required this.gradPrebivalistaController,
+    required this.oibController,
     this.spol = '',
     this.vrstaDokumenta = 'Osobna iskaznica',
     this.otvoreniDetalji = false,
@@ -40,6 +42,7 @@ class _GostFormPodaci {
     datumRodenjaController.dispose();
     drzavljanstvoController.dispose();
     gradPrebivalistaController.dispose();
+    oibController.dispose();
   }
 }
 
@@ -75,9 +78,10 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
           datumRodenjaController: TextEditingController(text: g.datumRodenja),
           drzavljanstvoController: TextEditingController(text: g.drzavljanstvo),
           gradPrebivalistaController: TextEditingController(text: g.gradPrebivalista),
+          oibController: TextEditingController(text: g.oib),
           spol: g.spol,
           vrstaDokumenta: g.vrstaDokumenta.isNotEmpty ? g.vrstaDokumenta : 'Osobna iskaznica',
-          otvoreniDetalji: g.datumRodenja.isNotEmpty || g.drzavljanstvo.isNotEmpty,
+          otvoreniDetalji: g.datumRodenja.isNotEmpty || g.drzavljanstvo.isNotEmpty || g.oib.isNotEmpty,
         ));
       }
       _nositeljIndex = p.gosti.indexWhere((g) => g.nositeljRacuna);
@@ -97,6 +101,7 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
         datumRodenjaController: TextEditingController(),
         drzavljanstvoController: TextEditingController(),
         gradPrebivalistaController: TextEditingController(),
+        oibController: TextEditingController(),
       ));
 
       _cijenaController.text = _service
@@ -232,6 +237,7 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
         datumRodenjaController: TextEditingController(),
         drzavljanstvoController: TextEditingController(),
         gradPrebivalistaController: TextEditingController(),
+        oibController: TextEditingController(),
       ));
     });
   }
@@ -314,6 +320,7 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
           drzavljanstvo: f.drzavljanstvoController.text.trim(),
           vrstaDokumenta: f.vrstaDokumenta,
           gradPrebivalista: f.gradPrebivalistaController.text.trim(),
+          oib: f.oibController.text.trim(),
         ));
       }
 
@@ -373,7 +380,7 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
         content: Text(
           'Apartman "$_odabraniApartman" je u odabranom razdoblju već rezerviran.\n\n'
           'Postojeći boravak: $nositelj\n'
-          'Zauzeti period: $odDatuma -$doDatuma\n\n'
+          'Zauzeti period: $odDatuma - $doDatuma\n\n'
           'Molimo odaberite slobodne datume ili drugi apartman.',
         ),
         actions: [
@@ -414,7 +421,7 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
                 items: _service.apartmani.map((a) {
                   return DropdownMenuItem(
                     value: a.naziv,
-                    child: Text('${a.naziv} (max${a.kapacitet} os.)'),
+                    child: Text('${a.naziv} (max ${a.kapacitet} os.)'),
                   );
                 }).toList(),
                 onChanged: (val) {
@@ -631,7 +638,7 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
                                 const Spacer(),
                                 if (f.brojDokumentaController.text.isNotEmpty)
                                   Text(
-                                    '${f.vrstaDokumenta}:${f.brojDokumentaController.text}',
+                                    '${f.vrstaDokumenta}: ${f.brojDokumentaController.text}',
                                     style: const TextStyle(fontSize: 11, color: Colors.green, fontWeight: FontWeight.bold),
                                   ),
                               ],
@@ -733,14 +740,36 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
                             ],
                           ),
                           const SizedBox(height: 8),
-                          TextField(
-                            controller: f.gradPrebivalistaController,
-                            decoration: const InputDecoration(
-                              labelText: 'Grad / Mjesto prebivališta',
-                              isDense: true,
-                              border: OutlineInputBorder(),
-                              contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                            ),
+                          Row(
+                            children: [
+                              Expanded(
+                                flex: 3,
+                                child: TextField(
+                                  controller: f.gradPrebivalistaController,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Grad / Mjesto prebivališta',
+                                    isDense: true,
+                                    border: OutlineInputBorder(),
+                                    contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                flex: 2,
+                                child: TextField(
+                                  controller: f.oibController,
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(
+                                    labelText: 'OIB (za HRV)',
+                                    hintText: '11 znamenki',
+                                    isDense: true,
+                                    border: OutlineInputBorder(),
+                                    contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ],
