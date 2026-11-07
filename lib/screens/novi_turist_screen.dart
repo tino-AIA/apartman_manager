@@ -200,9 +200,19 @@ class _NoviTuristScreenState extends State<NoviTuristScreen> {
         if (doc.drzavljanstvo.isNotEmpty) {
           g.drzavljanstvoController.text = doc.drzavljanstvo;
         }
-        if (doc.vrstaDokumenta.isNotEmpty) {
-          g.vrstaDokumenta = doc.vrstaDokumenta;
+
+        // Točno mapiranje vrste dokumenta u podržane opcije dropdown izbornika
+        final v = doc.vrstaDokumenta.toLowerCase();
+        if (v.contains('vozač') || v.contains('vozac') || v.contains('driv')) {
+          g.vrstaDokumenta = 'Vozačka dozvola';
+        } else if (v.contains('putovnic') || v.contains('pass')) {
+          g.vrstaDokumenta = 'Putovnica';
+        } else if (v.contains('ostalo')) {
+          g.vrstaDokumenta = 'Ostalo';
+        } else {
+          g.vrstaDokumenta = 'Osobna iskaznica';
         }
+
         g.otvoreniDetalji = true;
       });
 
