@@ -1,4 +1,5 @@
 // lib/screens/login_screen.dart
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/podaci_service.dart';
@@ -17,8 +18,23 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLogin = true;
   bool _ucitavanje = false;
 
+  // Kontrola privremenog prikaza lozinke (2 sekunde)
+  bool _pokaziLozinku = false;
+  Timer? _timerLozinke;
+
+  void _otkrijLozinkuPrivremeno() {
+    _timerLozinke?.cancel();
+    setState(() => _pokaziLozinku = true);
+    _timerLozinke = Timer(const Duration(seconds: 2), () {
+      if (mounted) {
+        setState(() => _pokaziLozinku = false);
+      }
+    });
+  }
+
   @override
   void dispose() {
+    _timerLozinke?.cancel();
     _emailCtrl.dispose();
     _passCtrl.dispose();
     super.dispose();
@@ -120,11 +136,19 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 16),
               TextField(
                 controller: _passCtrl,
-                obscureText: true,
-                decoration: const InputDecoration(
+                obscureText: !_pokaziLozinku,
+                decoration: InputDecoration(
                   labelText: 'Lozinka',
-                  prefixIcon: Icon(Icons.lock),
-                  border: OutlineInputBorder(),
+                  prefixIcon: const Icon(Icons.lock),
+                  border: const OutlineInputBorder(),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _pokaziLozinku ? Icons.visibility : Icons.visibility_off,
+                      color: _pokaziLozinku ? const Color(0xFF0D47A1) : Colors.grey,
+                    ),
+                    onPressed: _otkrijLozinkuPrivremeno,
+                    tooltip: 'Prikaži lozinku (2 sekunde)',
+                  ),
                 ),
               ),
               const SizedBox(height: 24),
