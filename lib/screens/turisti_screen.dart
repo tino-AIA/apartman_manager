@@ -78,9 +78,16 @@ class _TuristiScreenState extends State<TuristiScreen> {
         title: const Text('Popis turista'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.badge_outlined),
-            tooltip: 'eVisitor prijava (CSV)',
+          TextButton.icon(
+            style: TextButton.styleFrom(
+              foregroundColor: const Color(0xFF0D47A1),
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+            ),
+            icon: const Icon(Icons.badge_outlined, size: 20),
+            label: const Text(
+              'eVisitor',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
             onPressed: () {
               Navigator.push(
                 context,
@@ -88,11 +95,19 @@ class _TuristiScreenState extends State<TuristiScreen> {
               );
             },
           ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Osvježi podatke',
+          TextButton.icon(
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.black87,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+            ),
+            icon: const Icon(Icons.refresh, size: 20),
+            label: const Text(
+              'Osvježi',
+              style: TextStyle(fontSize: 13),
+            ),
             onPressed: () => _service.ucitajIzSupabase(),
           ),
+          const SizedBox(width: 4),
         ],
       ),
       body: boravci.isEmpty
