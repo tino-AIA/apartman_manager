@@ -241,7 +241,7 @@ class OcrService {
 
     if (ocisceneMrz.isEmpty) return null;
 
-    // TD3 Format (Putovnice: 2 linije po 44 znaka)
+    // TD3 Format (Putovnice: 2 linije)
     for (int i = 0; i < ocisceneMrz.length; i++) {
       final l1 = ocisceneMrz[i];
       if ((l1.startsWith('P<') || l1.startsWith('P')) && l1.contains('<<')) {
@@ -276,7 +276,7 @@ class OcrService {
       }
     }
 
-    // TD1 Format (Osobne iskaznice: 3 linije po 30 znakova)
+    // TD1 Format (Osobne iskaznice: 3 linije)
     if (ocisceneMrz.length >= 3) {
       for (int i = 0; i <= ocisceneMrz.length - 3; i++) {
         final l1 = ocisceneMrz[i];
@@ -340,7 +340,9 @@ class OcrService {
     }
 
     // 2. Državljanstvo
-    if (textGornji.contains('SLOVENSK') || textGornji.contains('SVK')) {
+    if (textGornji.contains('HRVATSKA') || textGornji.contains('CROATIA') || textGornji.contains('HRV')) {
+      drzavljanstvo = 'HRV';
+    } else if (textGornji.contains('SLOVENSK') || textGornji.contains('SVK')) {
       drzavljanstvo = 'SVK';
     } else if (textGornji.contains('POLSKA') || textGornji.contains('POLSKIE') || textGornji.contains('RZECZPOSPOLITA')) {
       drzavljanstvo = 'POL';
@@ -358,36 +360,48 @@ class OcrService {
       drzavljanstvo = 'UKR';
     } else if (textGornji.contains('BOSNA') || textGornji.contains('BIH')) {
       drzavljanstvo = 'BIH';
-    } else if (textGornji.contains('HRVATSKA') || textGornji.contains('CROATIA') || textGornji.contains('HRV')) {
-      drzavljanstvo = 'HRV';
     } else if (textGornji.contains('DEUTSCHLAND') || textGornji.contains('GERMANY') || textGornji.contains('DEU')) {
-      drzavljanstvo = 'DEU';
+      drzavljanstvo = textGornji.contains('RUS') ? 'RUS' : 'DEU';
     }
 
-    // 3. Ime i prezime
+    // 3. Ime i prezime (ciljano parsiranje s provjerom sljedećeg retka)
     for (int i = 0; i < linije.length; i++) {
       final l = linije[i].trim();
       final u = l.toUpperCase();
 
       if (_jeSustavnaRijec(u)) continue;
 
+      // Traženje prezimena
       if (prezime.isEmpty && _sadrziKljucnuRijecPrezimena(u)) {
-        String s = _ocistiOznake(l);
-        if (s.isEmpty && i + 1 < linije.length) s = linije[i + 1].trim();
-        if (s.isNotEmpty && !_jeSustavnaRijec(s) && !_sadrziBrojeve(s)) {
-          prezime = _ocistiImeTekst(s);
+        String kandidat = _ocistiOznake(l);
+        // Ako je oznaka bila sama u retku (npr. "1. PREZIME / SURNAME"), uzmi redak ispod
+        if (kandidat.isEmpty && i + 1 < linije.length) {
+          final sljedeca = linije[i + 1].trim();
+          if (!_jeSustavnaRijec(sljedeca) && !_sadrziBrojeve(sljedeca)) {
+            kandidat = sljedeca;
+          }
+        }
+        if (kandidat.isNotEmpty && !_jeSustavnaRijec(kandidat) && !_sadrziBrojeve(kandidat)) {
+          prezime = _ocistiImeTekst(kandidat);
         }
       }
 
+      // Traženje imena
       if (ime.isEmpty && _sadrziKljucnuRijecImena(u)) {
-        String s = _ocistiOznake(l);
-        if (s.isEmpty && i + 1 < linije.length) s = linije[i + 1].trim();
-        if (s.isNotEmpty && !_jeSustavnaRijec(s) && !_sadrziBrojeve(s)) {
-          ime = _ocistiImeTekst(s);
+        String kandidat = _ocistiOznake(l);
+        // Ako je oznaka bila sama u retku (npr. "2. IME / GIVEN NAMES"), uzmi redak ispod
+        if (kandidat.isEmpty && i + 1 < linije.length) {
+          final sljedeca = linije[i + 1].trim();
+          if (!_jeSustavnaRijec(sljedeca) && !_sadrziBrojeve(sljedeca)) {
+            kandidat = sljedeca;
+          }
+        }
+        if (kandidat.isNotEmpty && !_jeSustavnaRijec(kandidat) && !_sadrziBrojeve(kandidat)) {
+          ime = _ocistiImeTekst(kandidat);
         }
       }
 
-      // Broj dokumenta preko ključne riječi
+      // Broj dokumenta
       if (brojDokumenta.isEmpty &&
           (u.contains('ČÍSLO') ||
               u.contains('CISLO') ||
@@ -396,6 +410,7 @@ class OcrService {
               u.contains('CARD NO') ||
               u.contains('OKMÁNYAZONOSÍTÓ') ||
               u.contains('OKMANYAZONOSITO') ||
+              u.contains('BROJ') ||
               u.startsWith('5.'))) {
         final m = RegExp(r'[A-Z0-9]{2,4}\s?[0-9]{5,8}').firstMatch(u);
         if (m != null) {
@@ -410,9 +425,9 @@ class OcrService {
       }
     }
 
-    // Traženje broja isprave po formatu
+    // Traženje broja isprave po formatu (npr. hrvatski 9-znamenkasti broj 119567748)
     if (brojDokumenta.isEmpty) {
-      final matches = RegExp(r'\b([A-Z]{1,3}\s?[0-9]{6,8}|[0-9]{8,10}|[0-9]{6}[A-Z]{2})\b').allMatches(puniTekst);
+      final matches = RegExp(r'\b([0-9]{9}|[A-Z]{1,3}\s?[0-9]{6,8}|[0-9]{8,10}|[0-9]{6}[A-Z]{2})\b').allMatches(puniTekst);
       for (final m in matches) {
         final cand = m.group(0)!.replaceAll(' ', '');
         if (!_jeSustavnaRijec(cand) &&
@@ -425,7 +440,7 @@ class OcrService {
       }
     }
 
-    // 4. Datum rođenja
+    // 4. Datum rođenja (strogo ignorirati datume isteka i izdavanja)
     for (int i = 0; i < linije.length; i++) {
       final u = linije[i].toUpperCase();
       if ((u.contains('GEBURTSDATUM') ||
@@ -436,10 +451,12 @@ class OcrService {
               u.contains('SZÜLETÉSI') ||
               u.contains('SZULETESI') ||
               u.contains('ROĐENJA') ||
-              u.contains('RODJENJA')) &&
+              u.contains('RODJENJA') ||
+              u.contains('3. DATUM')) &&
           !u.contains('EXPIRY') &&
           !u.contains('GÜLTIG') &&
           !u.contains('VYDANIA') &&
+          !u.contains('VRIJEDI') &&
           !u.contains('ISSUE')) {
         final m = RegExp(r'([0-3]?[0-9])[\.\/\-\s]([0-1]?[0-9])[\.\/\-\s](19[3-9][0-9]|20[0-1][0-9])')
             .firstMatch(linije[i]);
@@ -457,6 +474,7 @@ class OcrService {
       }
     }
 
+    // Rezervna pretraga datuma rođenja
     if (datumRodenja == null) {
       final dateMatches = RegExp(r'\b([0-3]?[0-9])[\.\/\-\s]([0-1]?[0-9])[\.\/\-\s](19[3-9][0-9]|20[0-1][0-2])\b')
           .allMatches(puniTekst);
@@ -470,16 +488,16 @@ class OcrService {
     }
 
     // 5. Spol
-    if (RegExp(r'\b(POHLAVIE|PŁEĆ|POHLAVÍ|SEX|GESCHLECHT|NEM)\b', caseSensitive: false).hasMatch(puniTekst)) {
-      if (RegExp(r'\b(M|MUŽ|MALE|MÄNNLICH|FÉRFI)\b').hasMatch(textGornji)) {
+    if (RegExp(r'\b(POHLAVIE|PŁEĆ|POHLAVÍ|SEX|GESCHLECHT|NEM|SPOL)\b', caseSensitive: false).hasMatch(puniTekst)) {
+      if (RegExp(r'\b(M|MUŽ|MUŠKI|MALE|MÄNNLICH|FÉRFI)\b').hasMatch(textGornji)) {
         spol = 'M';
-      } else if (RegExp(r'\b(F|Ž|ŽENA|FEMALE|WEIBLICH|NŐ|NO)\b').hasMatch(textGornji)) {
+      } else if (RegExp(r'\b(F|Ž|ŽENA|ŽENSKI|FEMALE|WEIBLICH|NŐ|NO)\b').hasMatch(textGornji)) {
         spol = 'Ž';
       }
     }
 
-    // 6. Rezervno pronalaženje imena
-    if (prezime.isEmpty || ime.isEmpty) {
+    // 6. Rezervno traženje imena u čistim linijama (isključiti sve sistemske izraze)
+    if (prezime.isEmpty && ime.isEmpty) {
       for (var l in linije) {
         final clean = _ocistiImeTekst(l);
         if (clean.length >= 4 &&
@@ -489,8 +507,8 @@ class OcrService {
             !_sadrziBrojeve(l)) {
           final parts = clean.split(' ').where((x) => x.length >= 2).toList();
           if (parts.length >= 2) {
-            if (prezime.isEmpty) prezime = parts[0];
-            if (ime.isEmpty) ime = parts.sublist(1).join(' ');
+            prezime = parts[0];
+            ime = parts.sublist(1).join(' ');
             break;
           }
         }
@@ -516,7 +534,8 @@ class OcrService {
   }
 
   bool _sadrziKljucnuRijecPrezimena(String u) {
-    return u.contains('PRIEZVISKO') ||
+    return u.contains('PREZIME') ||
+        u.contains('PRIEZVISKO') ||
         u.contains('NAZWISKO') ||
         u.contains('PŘÍJMENÍ') ||
         u.contains('PRIJMENI') ||
@@ -530,7 +549,8 @@ class OcrService {
   }
 
   bool _sadrziKljucnuRijecImena(String u) {
-    return u.contains('GIVEN') ||
+    return u.contains('IME') ||
+        u.contains('GIVEN') ||
         u.contains('MENO') ||
         u.contains('IMIONA') ||
         u.contains('JMÉNO') ||
@@ -545,10 +565,10 @@ class OcrService {
   String _ocistiOznake(String l) {
     return l
         .replaceAll(
-            RegExp(r'\b(priezvisko|nazwisko|příjmení|prijmeni|prumeni|prjmeni|családi|csaladi|utónév|utonev|surname|namen|given\s*names?|gven\s*names?|imegiven\s*names?|meno|imiona|jméno|jmeno|forenames|vornamen|info|data)\b',
+            RegExp(r'\b(prezime|ime|priezvisko|nazwisko|příjmení|prijmeni|prumeni|prjmeni|családi|csaladi|utónév|utonev|surname|namen|given\s*names?|gven\s*names?|imegiven\s*names?|meno|imiona|jméno|jmeno|forenames|vornamen|info|data)\b',
                 caseSensitive: false),
             '')
-        .replaceAll(RegExp(r'^[12][\.\s]'), '')
+        .replaceAll(RegExp(r'^[12345][\.\s\w]?'), '')
         .replaceAll('/', '')
         .replaceAll(':', '')
         .replaceAll('-', '')
@@ -558,14 +578,16 @@ class OcrService {
   bool _jeSustavnaRijec(String tekst) {
     final u = tekst.toUpperCase().replaceAll(' ', '').replaceAll('-', '');
     final crnaLista = [
+      'POSTAVITE',
+      'ISPRAVU',
+      'OKVIR',
+      'POSTAVITEISPRAVU',
+      'ISPRAVUUOKVIR',
+      'POSTAVITEISPRAVUUOKVIR',
+      'PREZIMEISPRAVUUOKVIR',
       'INFO',
       'SUNSET',
       'BRELA',
-      'OKVIR',
-      'ISPRAVU',
-      'POSTAVITE',
-      'PREZIMEISPRAVUUOKVIR',
-      'POSTAVITEISPRAVUUOKVIR',
       'DATEOFBIRTH',
       'DATEOF',
       'BIRTH',
@@ -587,10 +609,13 @@ class OcrService {
       'DEUTSCHLAND',
       'REPUBLIKA',
       'REPUBLIC',
+      'REPUBLICOF',
       'SLOVENSKA',
       'CESKA',
       'POLSKA',
       'MAGYARORSZAG',
+      'HRVATSKA',
+      'CROATIA',
       'OBČANSKÝ',
       'PREUKAZ',
       'IDENTITY',
@@ -631,6 +656,8 @@ class OcrService {
       'UTONEV',
       'DATAURODZENIA',
       'DATAMONA',
+      'VRIJEDIDO',
+      'EXPIRYDATE',
     ];
 
     for (var w in crnaLista) {
@@ -645,7 +672,7 @@ class OcrService {
 
   String _ocistiImeTekst(String raw) {
     return raw
-        .replaceAll(RegExp(r'(?i)\b(info|sunset|brela|prumeni|prijmeni|prjmeni|csaladi|utonev|okmany|surname|given|names|namels|meno|data|hr)\b'), '')
+        .replaceAll(RegExp(r'(?i)\b(postavite|ispravu|okvir|prezime|ime|info|sunset|brela|prumeni|prijmeni|prjmeni|csaladi|utonev|okmany|surname|given|names|namels|meno|data|hr)\b'), '')
         .replaceAll(RegExp(r'[^a-zA-ZčćžšđČĆŽŠĐáéíóúýčďěňřšťžůÁÉÍÓÚÝČĎĚŇŘŠŤŽŮäöüÄÖÜőűŐŰß\s\-]'), '')
         .trim();
   }
@@ -820,23 +847,6 @@ class _KameraSkeniranjeScreenState extends State<_KameraSkeniranjeScreen> {
                     decoration: BoxDecoration(
                       border: Border.all(color: Colors.greenAccent, width: 2.5),
                       borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  bottom: 120,
-                  left: 20,
-                  right: 20,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.black87,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Text(
-                      'Pasoš: stranica sa slikom\nLična karta: poleđina (MRZ kod <<<)',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
                     ),
                   ),
                 ),
