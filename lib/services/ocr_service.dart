@@ -345,8 +345,8 @@ class OcrService {
     if (textGornji.contains('HRVATSKA') ||
         textGornji.contains('CROATIA') ||
         textGornji.contains('HRV') ||
-        textGornji.startsWith('HR ') ||
-        textGornji.contains(' RH ')) {
+        textGornji.contains(' RH ') ||
+        textGornji.contains('(HR)')) {
       drzavljanstvo = 'HRV';
     } else if (textGornji.contains('SLOVENSK') || textGornji.contains('SVK')) {
       drzavljanstvo = 'SVK';
@@ -370,7 +370,7 @@ class OcrService {
       drzavljanstvo = textGornji.contains('RUS') ? 'RUS' : 'DEU';
     }
 
-    // 3. Ciljano prepoznavanje polja (HR osobna, vozačka, međunarodne iskaznice)
+    // 3. Ime i prezime
     for (int i = 0; i < linije.length; i++) {
       final l = linije[i].trim();
       final u = l.toUpperCase();
@@ -380,7 +380,7 @@ class OcrService {
       // PREZIME (polje 1.)
       if (prezime.isEmpty && _jePoljePrezimena(u)) {
         String val = _ocistiOznake(l);
-        if (val.isEmpty && i + 1 < linije.length) {
+        if ((val.isEmpty || _jeSustavnaRijec(val)) && i + 1 < linije.length) {
           final sljedeca = linije[i + 1].trim();
           if (!_jeSustavnaRijec(sljedeca) && !_sadrziBrojeve(sljedeca)) {
             val = sljedeca;
@@ -394,7 +394,7 @@ class OcrService {
       // IME (polje 2.)
       if (ime.isEmpty && _jePoljeImena(u)) {
         String val = _ocistiOznake(l);
-        if (val.isEmpty && i + 1 < linije.length) {
+        if ((val.isEmpty || _jeSustavnaRijec(val)) && i + 1 < linije.length) {
           final sljedeca = linije[i + 1].trim();
           if (!_jeSustavnaRijec(sljedeca) && !_sadrziBrojeve(sljedeca)) {
             val = sljedeca;
@@ -405,7 +405,7 @@ class OcrService {
         }
       }
 
-      // BROJ ISPRAVE (polje 5. na vozačkoj i osobnoj)
+      // BROJ ISPRAVE (polje 5. ili oznake) - MORA sadržavati brojeve!
       if (brojDokumenta.isEmpty &&
           (u.startsWith('5.') ||
               u.contains('5. BROJ') ||
@@ -420,22 +420,27 @@ class OcrService {
         final m = RegExp(r'\b[A-Z0-9]{7,10}\b').firstMatch(u.replaceAll('5.', ''));
         if (m != null) {
           final cand = m.group(0)!;
-          if (!_jeSustavnaRijec(cand)) brojDokumenta = cand;
+          if (_sadrziBrojeve(cand) && !_jeSustavnaRijec(cand)) {
+            brojDokumenta = cand;
+          }
         } else if (i + 1 < linije.length) {
           final sljedeca = linije[i + 1].trim().replaceAll(' ', '');
-          if (RegExp(r'^[A-Z0-9]{7,10}$').hasMatch(sljedeca) && !_jeSustavnaRijec(sljedeca)) {
+          if (RegExp(r'^[A-Z0-9]{7,10}$').hasMatch(sljedeca) &&
+              _sadrziBrojeve(sljedeca) &&
+              !_jeSustavnaRijec(sljedeca)) {
             brojDokumenta = sljedeca;
           }
         }
       }
     }
 
-    // Rezervno traženje broja isprave ako gore nije nađen
+    // Rezervno traženje broja isprave (mora imati znamenke!)
     if (brojDokumenta.isEmpty) {
-      final matches = RegExp(r'\b([0-9]{9}|[A-Z0-9]{8,10}|[0-9]{8})\b').allMatches(puniTekst);
+      final matches = RegExp(r'\b([0-9]{8,10}|[A-Z0-9]{8,10}|[0-9]{6}[A-Z]{2})\b').allMatches(puniTekst);
       for (final m in matches) {
         final cand = m.group(0)!.replaceAll(' ', '');
-        if (!_jeSustavnaRijec(cand) &&
+        if (_sadrziBrojeve(cand) &&
+            !_jeSustavnaRijec(cand) &&
             !cand.startsWith('19') &&
             !cand.startsWith('20') &&
             cand.length >= 7) {
@@ -445,7 +450,7 @@ class OcrService {
       }
     }
 
-    // 4. DATUM ROĐENJA (polje 3. na vozačkoj i osobnoj, ignorirati 4a i 4b datume isteka)
+    // 4. DATUM ROĐENJA
     for (int i = 0; i < linije.length; i++) {
       final u = linije[i].toUpperCase();
       if ((u.startsWith('3.') ||
@@ -481,7 +486,6 @@ class OcrService {
       }
     }
 
-    // Rezervna pretraga datuma rođenja
     if (datumRodenja == null) {
       final dateMatches = RegExp(r'\b([0-3]?[0-9])[\.\/\-\s]([0-1]?[0-9])[\.\/\-\s](19[3-9][0-9]|20[0-1][0-2])\b')
           .allMatches(puniTekst);
@@ -542,6 +546,7 @@ class OcrService {
   bool _jePoljePrezimena(String u) {
     return u.startsWith('1.') ||
         u.startsWith('1 ') ||
+        u == 'PREZIME' ||
         u.contains('PREZIME') ||
         u.contains('SURNAME') ||
         u.contains('PRIEZVISKO') ||
@@ -553,6 +558,7 @@ class OcrService {
   bool _jePoljeImena(String u) {
     return u.startsWith('2.') ||
         u.startsWith('2 ') ||
+        u == 'IME' ||
         u.contains('IME') ||
         u.contains('GIVEN') ||
         u.contains('MENO') ||
@@ -565,7 +571,7 @@ class OcrService {
     return l
         .replaceAll(
             RegExp(
-                r'\b(prezime|ime|priezvisko|nazwisko|příjmení|prijmeni|prumeni|prjmeni|családi|csaladi|utónév|utonev|surname|namen|given\s*names?|gven\s*names?|imegiven\s*names?|meno|imiona|jméno|jmeno|forenames|vornamen|info|data|card\s*number|cardnumber|caronumber)\b',
+                r'\b(prezime|ime|priezvisko|nazwisko|příjmení|prijmeni|prumeni|prjmeni|családi|csaladi|utónév|utonev|surname|namen|given\s*names?|gven\s*names?|imegiven\s*names?|meno|imiona|jméno|jmeno|forenames|vornamen|info|data|card\s*number|cardnumber|caronumber|osobna\s*iskaznica)\b',
                 caseSensitive: false),
             '')
         .replaceAll(RegExp(r'^[12345][\.\s\w]?'), '')
@@ -578,6 +584,10 @@ class OcrService {
   bool _jeSustavnaRijec(String tekst) {
     final u = tekst.toUpperCase().replaceAll(' ', '').replaceAll('-', '');
     final crnaLista = [
+      'OSOBNAISKAZNICA',
+      'OSOBNA',
+      'ISKAZNICA',
+      'IDENTITYCARD',
       'CARDNUMBER',
       'CARONUMBER',
       'CARDNO',
@@ -681,7 +691,7 @@ class OcrService {
     return raw
         .replaceAll(
             RegExp(
-                r'\b(cardnumber|caronumber|card|postavite|ispravu|okvir|prezime|ime|info|sunset|brela|prumeni|prijmeni|prjmeni|csaladi|utonev|okmany|surname|given|names|namels|meno|data|hr)\b',
+                r'\b(osobna\s*iskaznica|osobna|iskaznica|cardnumber|caronumber|card|postavite|ispravu|okvir|prezime|ime|info|sunset|brela|prumeni|prijmeni|prjmeni|csaladi|utonev|okmany|surname|given|names|namels|meno|data|hr)\b',
                 caseSensitive: false),
             '')
         .replaceAll(RegExp(r'[^a-zA-ZčćžšđČĆŽŠĐáéíóúýčďěňřšťžůÁÉÍÓÚÝČĎĚŇŘŠŤŽŮäöüÄÖÜőűŐŰß\s\-]'), '')
