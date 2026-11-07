@@ -180,24 +180,40 @@ class _KnjigaPrometaScreenState extends State<KnjigaPrometaScreen> {
         title: const Text('Knjiga prometa (Obrazac EP)'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Osvježi podatke',
+          TextButton.icon(
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.black87,
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+            ),
+            icon: const Icon(Icons.refresh, size: 18),
+            label: const Text('Osvježi', style: TextStyle(fontSize: 12)),
             onPressed: () {
               _ucitajPostavke();
               _service.ucitajIzSupabase();
             },
           ),
-          IconButton(
-            icon: const Icon(Icons.table_view, color: Colors.green),
-            tooltip: 'Izvezi u Excel (.xlsx)',
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.green.shade800,
+              side: BorderSide(color: Colors.green.shade700),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            ),
+            icon: const Icon(Icons.table_chart, size: 16),
+            label: const Text('Excel', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
             onPressed: promet.isEmpty ? null : _izveziExcel,
           ),
-          IconButton(
-            icon: const Icon(Icons.picture_as_pdf, color: Colors.red),
-            tooltip: 'Službeni A4 PDF',
+          const SizedBox(width: 4),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade700,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            ),
+            icon: const Icon(Icons.picture_as_pdf, size: 16),
+            label: const Text('PDF', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
             onPressed: promet.isEmpty ? null : _izveziPdf,
           ),
+          const SizedBox(width: 8),
         ],
       ),
       body: Column(
