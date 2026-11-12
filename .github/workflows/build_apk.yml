@@ -31,9 +31,9 @@ jobs:
 
       - name: Podešavanje Android SDK, Gradle i R8
         run: |
-          # 1. Postavljanje točne verzije 9.3.1-bin.zip sa services.gradle.org mirrora
+          # 1. Postavljanje minimalne podržane verzije Gradle 9.5.0-bin.zip
           if [ -f android/gradle/wrapper/gradle-wrapper.properties ]; then
-            sed -i 's|distributionUrl=.*|distributionUrl=https\\://services.gradle.org/distributions/gradle-9.3.1-bin.zip|g' android/gradle/wrapper/gradle-wrapper.properties
+            sed -i 's|distributionUrl=.*|distributionUrl=https\\://services.gradle.org/distributions/gradle-9.5.0-bin.zip|g' android/gradle/wrapper/gradle-wrapper.properties
           fi
 
           # 2. Podešavanje minSdkVersion na 21 za ML Kit kameru
@@ -52,11 +52,9 @@ jobs:
               with open(path, "r", encoding="utf-8") as f:
                   content = f.read()
 
-              # Zaključavanje NDK verzije na predinstaliranu verziju
               if "ndkVersion" not in content:
                   content = re.sub(r"android\s*\{", "android {\n    ndkVersion = \"27.0.12077973\"", content, count=1)
 
-              # Onemogućavanje R8 minifikacije i shrinkanja resursa
               content = content.replace("getByName(\"release\") {", "getByName(\"release\") {\n            isMinifyEnabled = false\n            isShrinkResources = false")
               content = content.replace("release {", "release {\n            isMinifyEnabled = false\n            isShrinkResources = false")
 
@@ -65,9 +63,8 @@ jobs:
               print("Uspješno konfiguriran build.gradle.kts")
           '
 
-          # 4. Postavljanje AndroidX oznaka
+          # 4. Postavljanje AndroidX oznake
           echo "android.useAndroidX=true" >> android/gradle.properties
-          echo "android.enableJetifier=true" >> android/gradle.properties
 
       - name: Izrada APK instalacije
         run: flutter build apk --release
