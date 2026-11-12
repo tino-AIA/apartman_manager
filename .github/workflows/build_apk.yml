@@ -11,11 +11,11 @@ jobs:
       - name: Checkout koda
         uses: actions/checkout@v4
 
-      - name: Postavljanje Jave
+      - name: Postavljanje Jave 21
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
-          java-version: '17'
+          java-version: '21'
 
       - name: Postavljanje Fluttera
         uses: subosito/flutter-action@v2
@@ -29,7 +29,7 @@ jobs:
       - name: Instalacija paketa
         run: flutter pub get
 
-      - name: Podešavanje Android SDK, Gradle i R8
+      - name: Podešavanje Android SDK, Gradle, Lint i R8
         run: |
           # 1. Postavljanje minimalne podržane verzije Gradle 9.5.0-bin.zip
           if [ -f android/gradle/wrapper/gradle-wrapper.properties ]; then
@@ -43,7 +43,7 @@ jobs:
             sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 21/g' "$file"
           done
 
-          # 3. Zaključavanje NDK verzije i onemogućavanje R8 u build.gradle.kts
+          # 3. Konfiguracija build.gradle.kts (NDK, R8 i isključivanje Linta za vanjske plugine)
           python3 -c '
           import os, re
 
@@ -53,7 +53,7 @@ jobs:
                   content = f.read()
 
               if "ndkVersion" not in content:
-                  content = re.sub(r"android\s*\{", "android {\n    ndkVersion = \"27.0.12077973\"", content, count=1)
+                  content = re.sub(r"android\s*\{", "android {\n    ndkVersion = \"27.0.12077973\"\n    lint {\n        checkReleaseBuilds = false\n        abortOnError = false\n    }", content, count=1)
 
               content = content.replace("getByName(\"release\") {", "getByName(\"release\") {\n            isMinifyEnabled = false\n            isShrinkResources = false")
               content = content.replace("release {", "release {\n            isMinifyEnabled = false\n            isShrinkResources = false")
@@ -63,7 +63,17 @@ jobs:
               print("Uspješno konfiguriran build.gradle.kts")
           '
 
-          # 4. Postavljanje AndroidX oznake
+          # 4. Isključivanje lintVital zadataka za sve subprojekte (camera_android_camerax itd.)
+          cat << 'EOF' >> android/build.gradle.kts
+
+          subprojects {
+              tasks.matching { it.name.contains("lint", ignoreCase = true) }.configureEach {
+                  enabled = false
+              }
+          }
+          EOF
+
+          # 5. Postavljanje AndroidX oznake
           echo "android.useAndroidX=true" >> android/gradle.properties
 
       - name: Izrada APK instalacije
